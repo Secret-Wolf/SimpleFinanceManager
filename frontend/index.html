@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finanzmanager</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>Finanzmanager</h1>
+            </div>
+            <nav class="sidebar-nav">
+                <a class="nav-item active" data-page="dashboard">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="14" width="7" height="7"></rect>
+                        <rect x="3" y="14" width="7" height="7"></rect>
+                    </svg>
+                    <span>Dashboard</span>
+                </a>
+                <a class="nav-item" data-page="transactions">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="8" y1="6" x2="21" y2="6"></line>
+                        <line x1="8" y1="12" x2="21" y2="12"></line>
+                        <line x1="8" y1="18" x2="21" y2="18"></line>
+                        <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                        <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                        <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                    </svg>
+                    <span>Transaktionen</span>
+                    <span class="nav-badge hidden">0</span>
+                </a>
+                <a class="nav-item" data-page="categories">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    <span>Kategorien</span>
+                </a>
+                <a class="nav-item" data-page="rules">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                    </svg>
+                    <span>Regeln</span>
+                </a>
+                <a class="nav-item" data-page="statistics">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="20" x2="18" y2="10"></line>
+                        <line x1="12" y1="20" x2="12" y2="4"></line>
+                        <line x1="6" y1="20" x2="6" y2="14"></line>
+                    </svg>
+                    <span>Statistiken</span>
+                </a>
+                <a class="nav-item" data-page="import">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    <span>Import</span>
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Dashboard Page -->
+            <div id="page-dashboard" class="page">
+                <div class="page-header">
+                    <h2>Dashboard</h2>
+                    <p>Übersicht über deine Finanzen</p>
+                </div>
+                <div id="dashboard-content">
+                    <div class="loading-overlay"><div class="spinner"></div></div>
+                </div>
+            </div>
+
+            <!-- Transactions Page -->
+            <div id="page-transactions" class="page hidden">
+                <div class="page-header flex justify-between items-center">
+                    <div>
+                        <h2>Transaktionen</h2>
+                        <p>Alle Buchungen im Überblick</p>
+                    </div>
+                </div>
+
+                <!-- Filter Bar -->
+                <div class="filter-bar">
+                    <div class="search-input">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <input type="text" id="tx-search" class="form-control" placeholder="Suche..." oninput="debounce(applyTransactionFilters, 300)()">
+                    </div>
+
+                    <div class="filter-group">
+                        <button class="btn btn-sm btn-secondary" onclick="setQuickPeriod('week')">Woche</button>
+                        <button class="btn btn-sm btn-secondary" onclick="setQuickPeriod('month')">Monat</button>
+                        <button class="btn btn-sm btn-secondary" onclick="setQuickPeriod('quarter')">Quartal</button>
+                        <button class="btn btn-sm btn-secondary" onclick="setQuickPeriod('year')">Jahr</button>
+                    </div>
+
+                    <input type="date" id="tx-start-date" class="form-control" style="width: 140px;" onchange="applyTransactionFilters()">
+                    <input type="date" id="tx-end-date" class="form-control" style="width: 140px;" onchange="applyTransactionFilters()">
+
+                    <select id="tx-category-filter" class="form-control" style="width: 180px;" onchange="applyTransactionFilters()">
+                        <option value="">Alle Kategorien</option>
+                    </select>
+
+                    <select id="tx-amount-type" class="form-control" style="width: 140px;" onchange="applyTransactionFilters()">
+                        <option value="">Alle</option>
+                        <option value="income">Einnahmen</option>
+                        <option value="expenses">Ausgaben</option>
+                    </select>
+
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <input type="checkbox" id="uncategorized-filter" onchange="applyTransactionFilters()">
+                        <span>Nur unkategorisiert</span>
+                    </label>
+                </div>
+
+                <!-- Bulk Actions -->
+                <div id="bulk-actions" class="card hidden" style="margin-bottom: 16px; padding: 12px 16px;">
+                    <div class="flex items-center gap-4">
+                        <span><strong id="selected-count">0</strong> ausgewählt</span>
+                        <select id="bulk-category" class="form-control" style="width: 200px;">
+                            <option value="">Kategorie wählen</option>
+                        </select>
+                        <button class="btn btn-primary btn-sm" onclick="bulkCategorize()">Kategorie zuweisen</button>
+                        <button class="btn btn-secondary btn-sm" onclick="selectedTransactions.clear(); updateBulkActions(); loadTransactions();">Auswahl aufheben</button>
+                    </div>
+                </div>
+
+                <!-- Transactions Table -->
+                <div class="card">
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width: 40px;">
+                                        <input type="checkbox" class="checkbox" onclick="selectAllTransactions()">
+                                    </th>
+                                    <th style="width: 100px;">Datum</th>
+                                    <th>Empfänger / Verwendungszweck</th>
+                                    <th style="width: 180px;">Kategorie</th>
+                                    <th style="width: 120px;" class="text-right">Betrag</th>
+                                    <th style="width: 50px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="transactions-table">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="transactions-pagination"></div>
+            </div>
+
+            <!-- Categories Page -->
+            <div id="page-categories" class="page hidden">
+                <div class="page-header flex justify-between items-center">
+                    <div>
+                        <h2>Kategorien</h2>
+                        <p>Verwalte deine Kategorien</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="showAddCategoryModal()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                        Neue Kategorie
+                    </button>
+                </div>
+
+                <div class="card">
+                    <div id="categories-list" class="category-list">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rules Page -->
+            <div id="page-rules" class="page hidden">
+                <div class="page-header flex justify-between items-center">
+                    <div>
+                        <h2>Kategorisierungsregeln</h2>
+                        <p>Automatische Kategorisierung einrichten</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button class="btn btn-secondary" onclick="applyAllRules()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="23 4 23 10 17 10"></polyline>
+                                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                            </svg>
+                            Regeln anwenden
+                        </button>
+                        <button class="btn btn-primary" onclick="showAddRuleModal()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                            Neue Regel
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div id="rules-list">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Statistics Page -->
+            <div id="page-statistics" class="page hidden">
+                <div class="page-header flex justify-between items-center">
+                    <div>
+                        <h2>Statistiken</h2>
+                        <p>Deine Finanzen im Detail</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <select id="stats-period" class="form-control" onchange="changeStatsPeriod()">
+                            <option value="month">Dieser Monat</option>
+                            <option value="quarter">Dieses Quartal</option>
+                            <option value="year" selected>Dieses Jahr</option>
+                        </select>
+                        <button class="btn btn-secondary" onclick="exportStats()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            CSV Export
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Summary -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="label">Einnahmen</div>
+                        <div id="stats-income" class="value positive">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Ausgaben</div>
+                        <div id="stats-expenses" class="value negative">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Bilanz</div>
+                        <div id="stats-balance" class="value">-</div>
+                    </div>
+                </div>
+
+                <div class="flex gap-4" style="flex-wrap: wrap;">
+                    <!-- Category Chart -->
+                    <div class="card" style="flex: 1; min-width: 400px;">
+                        <div class="card-header">
+                            <h3>Ausgaben nach Kategorie</h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="category-chart-container" class="chart-container">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Time Chart -->
+                    <div class="card" style="flex: 1; min-width: 400px;">
+                        <div class="card-header">
+                            <h3>Einnahmen & Ausgaben im Zeitverlauf</h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="time-chart-container" class="chart-container">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Detailed Table -->
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h3>Detailübersicht</h3>
+                    </div>
+                    <div class="card-body">
+                        <div id="category-stats-table" class="table-container">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Import Page -->
+            <div id="page-import" class="page hidden">
+                <div class="page-header">
+                    <h2>CSV Import</h2>
+                    <p>Importiere Transaktionen aus deiner Bank-CSV</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-body">
+                        <input type="file" id="file-input" accept=".csv" style="display: none;">
+                        <div id="dropzone" class="dropzone">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                            <h4>CSV-Datei hierher ziehen</h4>
+                            <p>oder klicken zum Auswählen</p>
+                            <p style="margin-top: 12px; font-size: 0.75rem;">Unterstützt: Volksbank/Atruvia CSV-Format</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h3>Import-Historie</h3>
+                    </div>
+                    <div class="card-body">
+                        <div id="import-history" class="table-container">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+
+    <!-- Transaction Detail Modal -->
+    <div id="transaction-detail-modal" class="modal-overlay">
+        <div class="modal" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3>Transaktionsdetails</h3>
+                <button class="modal-close" onclick="closeModal('transaction-detail-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div style="display: grid; grid-template-columns: auto 1fr; gap: 12px 20px;">
+                    <div style="color: var(--text-secondary);">Datum:</div>
+                    <div id="detail-date">-</div>
+
+                    <div style="color: var(--text-secondary);">Empfänger:</div>
+                    <div id="detail-counterpart">-</div>
+
+                    <div style="color: var(--text-secondary);">IBAN:</div>
+                    <div id="detail-iban" style="font-family: monospace; font-size: 0.875rem;">-</div>
+
+                    <div style="color: var(--text-secondary);">Buchungsart:</div>
+                    <div id="detail-type">-</div>
+
+                    <div style="color: var(--text-secondary);">Verwendungszweck:</div>
+                    <div id="detail-purpose" style="word-break: break-word;">-</div>
+
+                    <div style="color: var(--text-secondary);">Betrag:</div>
+                    <div id="detail-amount" class="amount">-</div>
+                </div>
+
+                <div class="form-group mt-4">
+                    <label>Notizen</label>
+                    <textarea id="detail-notes" class="form-control" rows="3" placeholder="Notizen zur Transaktion..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="split-btn" class="btn btn-secondary">Aufteilen</button>
+                <button id="create-rule-btn" class="btn btn-secondary">Regel erstellen</button>
+                <button class="btn btn-primary" onclick="saveTransactionNotes(); closeModal('transaction-detail-modal')">Speichern</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Split Transaction Modal -->
+    <div id="split-modal" class="modal-overlay">
+        <div class="modal" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3>Transaktion aufteilen</h3>
+                <button class="modal-close" onclick="closeModal('split-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="split-transaction-id">
+
+                <div class="flex justify-between items-center mb-4">
+                    <span>Originalbetrag: <strong id="split-original-amount">0,00 €</strong></span>
+                    <span>Verbleibend: <strong id="split-remaining">0,00 €</strong></span>
+                </div>
+
+                <div id="split-parts">
+                </div>
+
+                <button class="btn btn-secondary btn-sm" onclick="addSplitPart()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    Teil hinzufügen
+                </button>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('split-modal')">Abbrechen</button>
+                <button class="btn btn-primary" onclick="saveSplit()">Aufteilen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Rule from Transaction Modal -->
+    <div id="create-rule-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Regel erstellen</h3>
+                <button class="modal-close" onclick="closeModal('create-rule-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="rule-from-tx-id">
+
+                <div style="background: var(--bg-secondary); padding: 12px; border-radius: var(--radius-md); margin-bottom: 16px;">
+                    <div style="font-size: 0.875rem; color: var(--text-secondary);">Empfänger: <span id="rule-preview-name">-</span></div>
+                    <div style="font-size: 0.875rem; color: var(--text-secondary);">IBAN: <span id="rule-preview-iban">-</span></div>
+                    <div style="font-size: 0.875rem; color: var(--text-secondary);">Verwendungszweck: <span id="rule-preview-purpose">-</span></div>
+                </div>
+
+                <div class="form-group">
+                    <label>Kategorie zuweisen</label>
+                    <select id="rule-category" class="form-control">
+                        <option value="">Kategorie wählen</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Matching-Kriterium</label>
+                    <select id="rule-match-type" class="form-control">
+                        <option value="counterpart_name">Empfängername</option>
+                        <option value="counterpart_iban">IBAN</option>
+                        <option value="purpose">Verwendungszweck</option>
+                        <option value="booking_type">Buchungsart</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('create-rule-modal')">Abbrechen</button>
+                <button class="btn btn-primary" onclick="saveRuleFromTransaction()">Regel erstellen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Category Modal -->
+    <div id="category-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="category-modal-title">Neue Kategorie</h3>
+                <button class="modal-close" onclick="closeModal('category-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="category-form">
+                    <input type="hidden" id="category-id">
+
+                    <div class="form-group">
+                        <label>Name</label>
+                        <input type="text" id="category-name" class="form-control" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Elternkategorie</label>
+                        <select id="category-parent" class="form-control">
+                            <option value="">Keine (Hauptkategorie)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Farbe</label>
+                        <input type="color" id="category-color" class="form-control" style="height: 40px; padding: 4px;">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Monatsbudget (optional)</label>
+                        <input type="number" id="category-budget" class="form-control" step="0.01" placeholder="0,00">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('category-modal')">Abbrechen</button>
+                <button class="btn btn-primary" onclick="saveCategory()">Speichern</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Category Modal -->
+    <div id="delete-category-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Kategorie löschen</h3>
+                <button class="modal-close" onclick="closeModal('delete-category-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="delete-category-id">
+
+                <p>
+                    Die Kategorie "<strong id="delete-category-name"></strong>" hat
+                    <strong id="delete-category-count">0</strong> Transaktionen.
+                </p>
+
+                <div class="form-group mt-4">
+                    <label>Transaktionen verschieben zu:</label>
+                    <select id="delete-move-to" class="form-control">
+                        <option value="">Keine (unkategorisiert)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('delete-category-modal')">Abbrechen</button>
+                <button class="btn btn-danger" onclick="confirmDeleteCategory()">Löschen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rule Modal -->
+    <div id="rule-modal" class="modal-overlay">
+        <div class="modal" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3 id="rule-modal-title">Neue Regel</h3>
+                <button class="modal-close" onclick="closeModal('rule-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="rule-form">
+                    <input type="hidden" id="rule-id">
+
+                    <div class="flex gap-4">
+                        <div class="form-group" style="flex: 2;">
+                            <label>Name (optional)</label>
+                            <input type="text" id="rule-name" class="form-control" placeholder="z.B. REWE Einkäufe">
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label>Priorität</label>
+                            <input type="number" id="rule-priority" class="form-control" value="0">
+                        </div>
+                    </div>
+
+                    <h4 style="margin: 20px 0 12px; font-size: 0.875rem; color: var(--text-secondary);">Matching-Kriterien (mind. 1 erforderlich)</h4>
+
+                    <div class="form-group">
+                        <label>Empfängername enthält</label>
+                        <input type="text" id="rule-counterpart" class="form-control" placeholder="z.B. REWE">
+                    </div>
+
+                    <div class="form-group">
+                        <label>IBAN</label>
+                        <input type="text" id="rule-iban" class="form-control" placeholder="DE...">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Verwendungszweck enthält</label>
+                        <input type="text" id="rule-purpose" class="form-control">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Buchungsart</label>
+                        <input type="text" id="rule-booking-type" class="form-control" placeholder="z.B. Kartenzahlung girocard">
+                    </div>
+
+                    <div class="flex gap-4">
+                        <div class="form-group" style="flex: 1;">
+                            <label>Betrag min</label>
+                            <input type="number" id="rule-amount-min" class="form-control" step="0.01">
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label>Betrag max</label>
+                            <input type="number" id="rule-amount-max" class="form-control" step="0.01">
+                        </div>
+                    </div>
+
+                    <h4 style="margin: 20px 0 12px; font-size: 0.875rem; color: var(--text-secondary);">Aktion</h4>
+
+                    <div class="form-group">
+                        <label>Kategorie zuweisen</label>
+                        <select id="rule-assign-category" class="form-control" required>
+                            <option value="">Kategorie wählen</option>
+                        </select>
+                    </div>
+
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="rule-active" checked>
+                        <span>Regel aktiv</span>
+                    </label>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('rule-modal')">Abbrechen</button>
+                <button class="btn btn-primary" onclick="saveRule()">Speichern</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Scripts -->
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/utils.js"></script>
+    <script src="/static/js/transactions.js"></script>
+    <script src="/static/js/categories.js"></script>
+    <script src="/static/js/rules.js"></script>
+    <script src="/static/js/import.js"></script>
+    <script src="/static/js/statistics.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
