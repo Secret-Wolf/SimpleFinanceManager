@@ -221,12 +221,21 @@
                         <h2>Statistiken</h2>
                         <p>Deine Finanzen im Detail</p>
                     </div>
-                    <div class="flex gap-2">
+                    <div class="flex gap-2 items-center flex-wrap">
                         <select id="stats-period" class="form-control" onchange="changeStatsPeriod()">
                             <option value="month">Dieser Monat</option>
+                            <option value="last_month">Letzter Monat</option>
+                            <option value="since_salary">Seit letztem Gehalt</option>
                             <option value="quarter">Dieses Quartal</option>
                             <option value="year" selected>Dieses Jahr</option>
+                            <option value="custom">Eigener Zeitraum</option>
                         </select>
+                        <div id="stats-custom-dates" class="flex gap-2" style="display: none;">
+                            <input type="date" id="stats-start-date" class="form-control" style="width: 140px;">
+                            <span style="color: var(--text-secondary);">bis</span>
+                            <input type="date" id="stats-end-date" class="form-control" style="width: 140px;">
+                            <button class="btn btn-primary btn-sm" onclick="applyCustomStatsPeriod()">Anwenden</button>
+                        </div>
                         <button class="btn btn-secondary" onclick="exportStats()">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>

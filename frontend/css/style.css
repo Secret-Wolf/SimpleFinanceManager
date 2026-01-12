@@ -526,7 +526,8 @@ select.form-control {
 
 /* Charts Container */
 .chart-container {
-    height: 300px;
+    max-height: 350px;
+    overflow-y: auto;
     position: relative;
 }
 

@@ -2,12 +2,55 @@
 
 let categoryChart = null;
 let timeChart = null;
+let customStatsStartDate = null;
+let customStatsEndDate = null;
 
 async function loadStatistics() {
     await Promise.all([
         loadCategoryStats(),
         loadTimeStats()
     ]);
+}
+
+function changeStatsPeriod() {
+    const period = document.getElementById('stats-period').value;
+    const customDatesDiv = document.getElementById('stats-custom-dates');
+
+    if (period === 'custom') {
+        customDatesDiv.style.display = 'flex';
+        // Set default dates to current month if not already set
+        if (!document.getElementById('stats-start-date').value) {
+            const today = new Date();
+            const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+            document.getElementById('stats-start-date').value = firstDay.toISOString().split('T')[0];
+            document.getElementById('stats-end-date').value = today.toISOString().split('T')[0];
+        }
+        // Don't load stats yet - wait for user to click "Anwenden"
+    } else {
+        customDatesDiv.style.display = 'none';
+        customStatsStartDate = null;
+        customStatsEndDate = null;
+        loadStatistics();
+    }
+}
+
+function applyCustomStatsPeriod() {
+    const startDate = document.getElementById('stats-start-date').value;
+    const endDate = document.getElementById('stats-end-date').value;
+
+    if (!startDate || !endDate) {
+        showToast('Bitte Start- und Enddatum angeben', 'error');
+        return;
+    }
+
+    if (new Date(startDate) > new Date(endDate)) {
+        showToast('Startdatum muss vor Enddatum liegen', 'error');
+        return;
+    }
+
+    customStatsStartDate = startDate;
+    customStatsEndDate = endDate;
+    loadStatistics();
 }
 
 async function loadCategoryStats() {
@@ -18,7 +61,12 @@ async function loadCategoryStats() {
     container.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
 
     try {
-        const stats = await api.getStatsByCategory({ period });
+        const params = { period };
+        if (period === 'custom' && customStatsStartDate && customStatsEndDate) {
+            params.start_date = customStatsStartDate;
+            params.end_date = customStatsEndDate;
+        }
+        const stats = await api.getStatsByCategory(params);
 
         // Render chart
         renderCategoryChart(stats.categories.filter(c => c.total > 0).slice(0, 10));
@@ -78,7 +126,12 @@ async function loadTimeStats() {
     container.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
 
     try {
-        const stats = await api.getStatsOverTime({ period });
+        const params = { period };
+        if (period === 'custom' && customStatsStartDate && customStatsEndDate) {
+            params.start_date = customStatsStartDate;
+            params.end_date = customStatsEndDate;
+        }
+        const stats = await api.getStatsOverTime(params);
         renderTimeChart(stats.data);
     } catch (error) {
         container.innerHTML = `<p style="color: var(--danger-color)">Fehler: ${error.message}</p>`;
@@ -251,15 +304,16 @@ function formatTimeLabel(dateStr) {
     return dateStr;
 }
 
-function changeStatsPeriod() {
-    loadStatistics();
-}
-
 async function exportStats() {
     const period = document.getElementById('stats-period').value;
 
     try {
-        const stats = await api.getStatsByCategory({ period });
+        const params = { period };
+        if (period === 'custom' && customStatsStartDate && customStatsEndDate) {
+            params.start_date = customStatsStartDate;
+            params.end_date = customStatsEndDate;
+        }
+        const stats = await api.getStatsByCategory(params);
 
         // Create CSV
         let csv = 'Kategorie;Summe;Durchschnitt/Monat;Anzahl\n';
