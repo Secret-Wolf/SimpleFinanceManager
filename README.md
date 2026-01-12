@@ -2,15 +2,38 @@
 
 Eine selbst-gehostete Webanwendung zum Verwalten von Banktransaktionen. Importiere CSV-Exporte von deutschen Banken (Volksbank/Atruvia), kategorisiere Transaktionen und behalte den Überblick über deine Finanzen.
 
+## Screenshots
+
+### Dashboard
+![Dashboard](Bilder/Finanzmanager%20Dashboard.jpg)
+
+### Transaktionen
+![Transaktionen](Bilder/Finanzmanager%20Transaktionen%20Default.jpg)
+
+![Transaktionen mit Filtern](Bilder/Finanzmanager%20Transaktionen%20Datum+Kategorie.jpg)
+
+### Kategorien
+![Kategorien](Bilder/Finanzmanager%20Kategorien.jpg)
+
+### Regeln
+![Regeln](Bilder/Finanzmanager%20Regeln.jpg)
+
+### Statistiken
+![Statistiken](Bilder/Finanzmanager%20Statistiken%20Default.jpg)
+
+![Statistiken mit Zeitraum](Bilder/Finanzmanager%20Statistiken%20Zeitraum.jpg)
+
 ## Features
 
 - **CSV-Import** - Drag & Drop Import von Volksbank/Atruvia CSV-Dateien
 - **Automatische Duplikaterkennung** - Bereits importierte Transaktionen werden übersprungen
-- **Kategorisierung** - Hierarchische Kategorien (2 Ebenen) mit Farbcodes
+- **Kategorisierung** - Hierarchische Kategorien (2 Ebenen) mit Farbcodes und optionalem Monatsbudget
 - **Automatische Regeln** - Transaktionen automatisch kategorisieren lassen
 - **Splitbuchungen** - Eine Transaktion auf mehrere Kategorien aufteilen
+- **Notizen** - Eigene Notizen zu Transaktionen hinzufügen
 - **Dashboard** - Übersicht über Kontostand, Einnahmen/Ausgaben, Top-Kategorien
 - **Statistiken** - Ausgaben nach Kategorie, Zeitverläufe, CSV-Export
+- **Flexible Zeiträume** - Woche, Monat, Quartal, Jahr, "Seit letztem Gehalt" oder eigener Zeitraum
 - **Deutsches Format** - Beträge in 1.234,56 € Format
 
 ## Installation
@@ -22,12 +45,18 @@ Eine selbst-gehostete Webanwendung zum Verwalten von Banktransaktionen. Importie
 
 ### Setup
 
-1. **In das Backend-Verzeichnis wechseln:**
+1. **Repository klonen:**
+   ```bash
+   git clone https://github.com/Secret-Wolf/SimpleFinanceManager.git
+   cd SimpleFinanceManager
+   ```
+
+2. **In das Backend-Verzeichnis wechseln:**
    ```bash
    cd backend
    ```
 
-2. **Virtuelle Umgebung erstellen (empfohlen):**
+3. **Virtuelle Umgebung erstellen (empfohlen):**
    ```bash
    python -m venv venv
 
@@ -38,17 +67,17 @@ Eine selbst-gehostete Webanwendung zum Verwalten von Banktransaktionen. Importie
    source venv/bin/activate
    ```
 
-3. **Abhängigkeiten installieren:**
+4. **Abhängigkeiten installieren:**
    ```bash
    pip install -r requirements.txt
    ```
 
-4. **Server starten:**
+5. **Server starten:**
    ```bash
    python run.py
    ```
 
-5. **Im Browser öffnen:**
+6. **Im Browser öffnen:**
    ```
    http://localhost:8000
    ```
@@ -96,6 +125,14 @@ Für Transaktionen, die mehrere Kategorien betreffen (z.B. Supermarkteinkauf mit
 3. Beträge und Kategorien für jeden Teil eingeben
 4. Die Summe muss dem Originalbetrag entsprechen
 
+### Statistiken
+
+Die Statistik-Seite bietet verschiedene Zeiträume:
+- **Dieser Monat / Letzter Monat** - Monatsübersicht
+- **Dieses Quartal / Dieses Jahr** - Längere Zeiträume
+- **Seit letztem Gehalt** - Automatische Erkennung des letzten Gehaltseingangs
+- **Eigener Zeitraum** - Frei wählbarer Start- und Endzeitraum
+
 ## Tastaturkürzel
 
 | Taste | Funktion |
@@ -127,7 +164,7 @@ python run.py
 ## Projektstruktur
 
 ```
-finanzmanager/
+SimpleFinanceManager/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py           # FastAPI App
@@ -144,10 +181,13 @@ finanzmanager/
 │   └── js/                   # JavaScript-Module
 ├── data/
 │   └── finanzmanager.db      # SQLite Datenbank
+├── Bilder/                   # Screenshots
 └── README.md
 ```
 
 ## Unterstützte CSV-Formate
+
+Aktuell wird das **Volksbank/Atruvia**-Format unterstützt. Der CSV-Parser kann leicht für andere Banken erweitert werden - siehe `backend/app/services/csv_parser.py`.
 
 ### Volksbank / Atruvia
 
@@ -197,4 +237,4 @@ Auf der Kategorien-Seite "Standardkategorien erstellen" klicken.
 
 ## Lizenz
 
-Privates Projekt - nur für den persönlichen Gebrauch.
+MIT License - siehe [LICENSE](LICENSE) für Details.
