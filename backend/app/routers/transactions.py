@@ -5,9 +5,10 @@ from typing import Optional, List
 from datetime import date
 from decimal import Decimal
 import hashlib
+import uuid
 
 from ..database import get_db
-from ..models import Transaction, Category
+from ..models import Transaction, Category, Account
 from .. import schemas
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
@@ -294,3 +295,58 @@ def bulk_categorize(
     db.commit()
 
     return {"message": f"{updated} Transaktionen aktualisiert"}
+
+
+@router.post("/manual", response_model=schemas.Transaction)
+def create_manual_transaction(
+    data: schemas.ManualTransactionCreate,
+    db: Session = Depends(get_db)
+):
+    """Erstellt eine manuelle Transaktion (Bargeld, Geschenke, etc.)"""
+
+    # Bargeld-Account erstellen oder finden
+    cash_iban = "CASH0000000000000000"
+    cash_account = db.query(Account).filter(Account.iban == cash_iban).first()
+
+    if not cash_account:
+        cash_account = Account(
+            name="Bargeld",
+            iban=cash_iban,
+            bank_name="Manuell",
+            account_type="cash"
+        )
+        db.add(cash_account)
+        db.flush()
+
+    # Kategorie validieren falls angegeben
+    if data.category_id:
+        category = db.query(Category).filter(Category.id == data.category_id).first()
+        if not category:
+            raise HTTPException(status_code=400, detail="Kategorie nicht gefunden")
+
+    # Eindeutigen Hash generieren
+    import_hash = f"manual_{uuid.uuid4().hex[:24]}"
+
+    # Transaktion erstellen
+    transaction = Transaction(
+        import_hash=import_hash,
+        account_id=cash_account.id,
+        account_name=cash_account.name,
+        account_iban=cash_iban,
+        bank_name="Manuell",
+        booking_date=data.booking_date,
+        value_date=data.booking_date,
+        counterpart_name=data.description,
+        booking_type="Manuelle Buchung",
+        purpose=data.description,
+        amount=data.amount,
+        currency="EUR",
+        category_id=data.category_id,
+        notes=data.notes
+    )
+
+    db.add(transaction)
+    db.commit()
+    db.refresh(transaction)
+
+    return transaction
