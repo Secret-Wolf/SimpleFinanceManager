@@ -86,6 +86,13 @@
                         <h2>Transaktionen</h2>
                         <p>Alle Buchungen im Überblick</p>
                     </div>
+                    <button class="btn btn-primary" onclick="showManualEntryModal()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                        Manueller Eintrag
+                    </button>
                 </div>
 
                 <!-- Filter Bar -->
@@ -624,6 +631,69 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeModal('rule-modal')">Abbrechen</button>
                 <button class="btn btn-primary" onclick="saveRule()">Speichern</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Manual Entry Modal -->
+    <div id="manual-entry-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Manueller Eintrag</h3>
+                <button class="modal-close" onclick="closeModal('manual-entry-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="manual-entry-form">
+                    <div class="form-group">
+                        <label>Datum</label>
+                        <input type="date" id="manual-date" class="form-control" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Typ</label>
+                        <div class="flex gap-4">
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                <input type="radio" name="manual-type" id="manual-type-expense" value="expense" checked>
+                                <span>Ausgabe</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                <input type="radio" name="manual-type" id="manual-type-income" value="income">
+                                <span>Einnahme</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Betrag</label>
+                        <input type="number" id="manual-amount" class="form-control" step="0.01" min="0.01" placeholder="0,00" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Beschreibung</label>
+                        <input type="text" id="manual-description" class="form-control" placeholder="z.B. Geburtstagsgeschenk Oma" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Kategorie (optional)</label>
+                        <select id="manual-category" class="form-control">
+                            <option value="">Keine Kategorie</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Notizen (optional)</label>
+                        <textarea id="manual-notes" class="form-control" rows="2" placeholder="Zusätzliche Notizen..."></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('manual-entry-modal')">Abbrechen</button>
+                <button class="btn btn-primary" onclick="saveManualEntry()">Speichern</button>
             </div>
         </div>
     </div>

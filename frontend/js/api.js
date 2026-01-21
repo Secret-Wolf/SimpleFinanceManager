@@ -79,6 +79,13 @@ class ApiClient {
         });
     }
 
+    async createManualTransaction(data) {
+        return this.request('/transactions/manual', {
+            method: 'POST',
+            body: data
+        });
+    }
+
     // Categories
     async getCategories(flat = false) {
         return this.request(`/categories?flat=${flat}`);

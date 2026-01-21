@@ -82,6 +82,15 @@ class TransactionCreate(TransactionBase):
     account_iban: str
 
 
+class ManualTransactionCreate(BaseModel):
+    """Schema fuer manuelle Transaktionen (Bargeld, Geschenke, etc.)"""
+    booking_date: date
+    amount: Decimal  # Positiv = Einnahme, Negativ = Ausgabe
+    description: str  # Beschreibung/Verwendungszweck
+    category_id: Optional[int] = None
+    notes: Optional[str] = None
+
+
 class TransactionUpdate(BaseModel):
     category_id: Optional[int] = None
     notes: Optional[str] = None

@@ -424,3 +424,68 @@ async function saveRuleFromTransaction() {
     }
 }
 
+// Manual Entry Modal
+function showManualEntryModal() {
+    // Reset form
+    document.getElementById('manual-entry-form').reset();
+
+    // Set default date to today
+    document.getElementById('manual-date').value = formatDateInput(new Date());
+
+    // Set default type to expense
+    document.getElementById('manual-type-expense').checked = true;
+
+    // Populate category select
+    document.getElementById('manual-category').innerHTML = `
+        <option value="">Keine Kategorie</option>
+        ${generateCategoryOptions(categories)}
+    `;
+
+    openModal('manual-entry-modal');
+}
+
+async function saveManualEntry() {
+    const bookingDate = document.getElementById('manual-date').value;
+    const amountInput = parseFloat(document.getElementById('manual-amount').value);
+    const description = document.getElementById('manual-description').value.trim();
+    const categoryId = document.getElementById('manual-category').value;
+    const notes = document.getElementById('manual-notes').value.trim();
+    const isIncome = document.getElementById('manual-type-income').checked;
+
+    // Validation
+    if (!bookingDate) {
+        showToast('Bitte Datum eingeben', 'error');
+        return;
+    }
+
+    if (!amountInput || amountInput <= 0) {
+        showToast('Bitte gültigen Betrag eingeben', 'error');
+        return;
+    }
+
+    if (!description) {
+        showToast('Bitte Beschreibung eingeben', 'error');
+        return;
+    }
+
+    // Amount: positive for income, negative for expense
+    const amount = isIncome ? amountInput : -amountInput;
+
+    const data = {
+        booking_date: bookingDate,
+        amount: amount,
+        description: description,
+        category_id: categoryId ? parseInt(categoryId) : null,
+        notes: notes || null
+    };
+
+    try {
+        await api.createManualTransaction(data);
+        showToast('Eintrag erstellt', 'success');
+        closeModal('manual-entry-modal');
+        loadTransactions();
+    } catch (error) {
+        showToast('Fehler: ' + error.message, 'error');
+    }
+}
+
