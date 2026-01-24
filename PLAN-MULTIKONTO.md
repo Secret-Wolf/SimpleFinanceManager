@@ -1,6 +1,6 @@
 # Plan: Multi-Bank Import & Multikonten-Übersicht
 
-## Status: Fertig
+## Status: Fertig (inkl. Globaler Konto-Filter)
 
 ---
 
@@ -96,3 +96,23 @@ Währung (2) -> currency (für Betrag)
 - `frontend/js/import.js` - Bank-Format Auswahl
 - `frontend/js/app.js` - Accounts-Navigation
 - `frontend/css/style.css` - Accounts-Styling
+
+---
+
+## Phase 4: Globaler Konto-Filter ✅ Fertig
+
+### Backend
+- [x] `GET /api/stats/summary` - account_id Parameter hinzugefügt
+- [x] `GET /api/stats/by-category` - account_id Parameter hinzugefügt
+- [x] `GET /api/stats/over-time` - account_id Parameter hinzugefügt
+- [x] `GET /api/transactions` - account_id Parameter hinzugefügt
+- [x] statistics.py Service-Funktionen um account_id erweitert
+
+### Frontend
+- [x] Globaler Konto-Selektor in Sidebar
+- [x] `selectedAccountId` State-Variable
+- [x] `onAccountFilterChange()` Funktion
+- [x] Dashboard filtert nach Konto
+- [x] Transaktionen filtern nach Konto
+- [x] Statistiken filtern nach Konto
+- [x] Konto-Dropdown wird nur bei >1 Konto angezeigt

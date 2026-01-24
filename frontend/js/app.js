@@ -4,6 +4,8 @@
 let currentPage = 'dashboard';
 let categories = [];
 let flatCategories = [];
+let selectedAccountId = null; // null = Alle Konten
+let accounts = [];
 
 // Navigation
 function navigateTo(page) {
@@ -56,6 +58,9 @@ function navigateTo(page) {
 async function init() {
     // Load categories for global use
     await loadCategoriesData();
+
+    // Load accounts and populate filter dropdown
+    await loadAccountsDropdown();
 
     // Set up navigation
     document.querySelectorAll('.nav-item').forEach(item => {
@@ -132,7 +137,7 @@ async function loadDashboard() {
     container.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
 
     try {
-        const summary = await api.getDashboardSummary();
+        const summary = await api.getDashboardSummary(selectedAccountId);
 
         const incomeChange = percentChange(summary.income_current_month, summary.income_previous_month);
         const expenseChange = percentChange(summary.expenses_current_month, summary.expenses_previous_month);
@@ -239,6 +244,75 @@ async function loadDashboard() {
     } catch (error) {
         container.innerHTML = `<div class="empty-state"><p>Fehler beim Laden: ${error.message}</p></div>`;
     }
+}
+
+// Load accounts into global filter dropdown
+async function loadAccountsDropdown() {
+    try {
+        accounts = await api.getAccounts();
+        const dropdown = document.getElementById('global-account-filter');
+
+        if (dropdown && accounts.length > 0) {
+            dropdown.innerHTML = `
+                <option value="">Alle Konten</option>
+                ${accounts.map(acc => `
+                    <option value="${acc.id}">${acc.name}${acc.bank_name ? ' (' + acc.bank_name + ')' : ''}</option>
+                `).join('')}
+            `;
+
+            // Show the selector only if there are multiple accounts
+            const selector = document.querySelector('.account-selector');
+            if (selector) {
+                if (accounts.length > 1) {
+                    selector.style.display = 'block';
+                } else {
+                    selector.style.display = 'none';
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Failed to load accounts:', error);
+        accounts = [];
+    }
+}
+
+// Handle account filter change
+function onAccountFilterChange() {
+    const dropdown = document.getElementById('global-account-filter');
+    const value = dropdown.value;
+
+    selectedAccountId = value ? parseInt(value) : null;
+
+    // Update header to show selected account
+    updateAccountHeader();
+
+    // Reload current page data with new filter
+    switch (currentPage) {
+        case 'dashboard':
+            loadDashboard();
+            break;
+        case 'transactions':
+            transactionFilters.page = 1; // Reset to first page
+            loadTransactions();
+            break;
+        case 'statistics':
+            loadStatistics();
+            break;
+    }
+}
+
+// Update account indicator in header (optional visual feedback)
+function updateAccountHeader() {
+    const dropdown = document.getElementById('global-account-filter');
+    const selectedOption = dropdown.options[dropdown.selectedIndex];
+
+    // Could add visual indication of selected account
+    // For now, the dropdown itself shows the selection
+}
+
+// Helper to get current account ID for API calls
+function getSelectedAccountId() {
+    return selectedAccountId;
 }
 
 // Start app when DOM is ready

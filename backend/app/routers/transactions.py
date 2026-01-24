@@ -24,6 +24,7 @@ def get_transactions(
     end_date: Optional[date] = None,
     category_id: Optional[int] = None,
     include_subcategories: bool = True,
+    account_id: Optional[int] = None,
     account_iban: Optional[str] = None,
     amount_type: Optional[str] = Query(None, regex="^(income|expenses|all)$"),
     search: Optional[str] = None,
@@ -56,7 +57,9 @@ def get_transactions(
     if uncategorized_only:
         query = query.filter(Transaction.category_id == None)
 
-    if account_iban:
+    if account_id:
+        query = query.filter(Transaction.account_id == account_id)
+    elif account_iban:
         query = query.filter(Transaction.account_iban == account_iban)
 
     if amount_type == "income":

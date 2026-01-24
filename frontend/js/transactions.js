@@ -29,6 +29,11 @@ async function loadTransactions() {
         if (!params.category_id) delete params.category_id;
         if (!params.amount_type) delete params.amount_type;
 
+        // Add account filter if selected
+        if (selectedAccountId) {
+            params.account_id = selectedAccountId;
+        }
+
         const result = await api.getTransactions(params);
 
         if (result.items.length === 0) {
