@@ -741,3 +741,109 @@ select.form-control {
 .gap-4 {
     gap: 16px;
 }
+
+/* Accounts Grid */
+.accounts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 20px;
+}
+
+.account-card {
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.account-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+.account-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.account-bank {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.bank-icon {
+    font-size: 1.25rem;
+}
+
+.bank-name {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.account-type-badge {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+}
+
+.account-name {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.account-iban {
+    font-family: monospace;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+}
+
+.account-balance {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 16px;
+}
+
+.account-balance.positive {
+    color: var(--success-color);
+}
+
+.account-balance.negative {
+    color: var(--danger-color);
+}
+
+.account-stats {
+    display: flex;
+    gap: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color);
+}
+
+.account-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.account-stat .stat-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+.account-stat .stat-value {
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.account-stat .stat-value.positive {
+    color: var(--success-color);
+}
+
+.account-stat .stat-value.negative {
+    color: var(--danger-color);
+}

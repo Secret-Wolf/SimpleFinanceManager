@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse
 import os
 
 from .database import init_db
-from .routers import transactions, categories, rules, imports, stats
+from .routers import transactions, categories, rules, imports, stats, accounts
 
 app = FastAPI(
     title="Finanzmanager",
@@ -28,6 +28,7 @@ app.include_router(categories.router)
 app.include_router(rules.router)
 app.include_router(imports.router)
 app.include_router(stats.router)
+app.include_router(accounts.router)
 
 # Static files for frontend
 frontend_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "frontend")

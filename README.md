@@ -38,12 +38,68 @@ Eine selbst-gehostete Webanwendung zum Verwalten von Banktransaktionen. Importie
 
 ## Installation
 
-### Voraussetzungen
+### Option 1: Docker (empfohlen)
+
+#### Voraussetzungen
+- Docker
+- Docker Compose (optional, aber empfohlen)
+
+#### Mit Docker Compose
+
+1. **Repository klonen:**
+   ```bash
+   git clone https://github.com/Secret-Wolf/SimpleFinanceManager.git
+   cd SimpleFinanceManager
+   ```
+
+2. **Datenverzeichnis vorbereiten:**
+   ```bash
+   mkdir -p data
+   # Falls du eine bestehende DB hast, kopiere sie nach data/finanzmanager.db
+   ```
+
+3. **Image bauen und starten:**
+   ```bash
+   docker compose up -d
+   ```
+
+4. **Im Browser öffnen:**
+   ```
+   http://localhost:8000
+   ```
+
+#### Mit eigener Docker Registry
+
+Falls du eine eigene Registry hast (z.B. `192.168.178.30:5000`):
+
+```bash
+# Image bauen
+docker build -t finanzmanager:latest .
+
+# Image taggen für Registry
+docker tag finanzmanager:latest 192.168.178.30:5000/finanzmanager:latest
+
+# In Registry pushen
+docker push 192.168.178.30:5000/finanzmanager:latest
+
+# Auf dem Zielserver: Container starten
+docker compose up -d
+```
+
+#### Bestehende Datenbank übernehmen
+
+Die Datenbank wird als Volume gemountet (`./data:/app/data`). Kopiere deine bestehende `finanzmanager.db` einfach in den `data/` Ordner, bevor du den Container startest.
+
+---
+
+### Option 2: Lokale Installation
+
+#### Voraussetzungen
 
 - Python 3.10 oder höher
 - pip (Python Package Manager)
 
-### Setup
+#### Setup
 
 1. **Repository klonen:**
    ```bash

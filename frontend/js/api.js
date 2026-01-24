@@ -164,11 +164,11 @@ class ApiClient {
     }
 
     // Import
-    async uploadCSV(file, autoCategorize = true) {
+    async uploadCSV(file, bankFormat = 'auto', autoCategorize = true) {
         const formData = new FormData();
         formData.append('file', file);
 
-        return this.request(`/import?auto_categorize=${autoCategorize}`, {
+        return this.request(`/import?bank_format=${bankFormat}&auto_categorize=${autoCategorize}`, {
             method: 'POST',
             body: formData
         });
@@ -176,6 +176,10 @@ class ApiClient {
 
     async getImports(limit = 20) {
         return this.request(`/import?limit=${limit}`);
+    }
+
+    async getImportFormats() {
+        return this.request('/import/formats');
     }
 
     // Statistics

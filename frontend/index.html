@@ -55,6 +55,13 @@
                     </svg>
                     <span>Statistiken</span>
                 </a>
+                <a class="nav-item" data-page="accounts">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+                        <path d="M7 15h0M2 9h20"></path>
+                    </svg>
+                    <span>Konten</span>
+                </a>
                 <a class="nav-item" data-page="import">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -306,6 +313,31 @@
                 </div>
             </div>
 
+            <!-- Accounts Page -->
+            <div id="page-accounts" class="page hidden">
+                <div class="page-header">
+                    <h2>Konten</h2>
+                    <p>Übersicht aller verbundenen Bankkonten</p>
+                </div>
+
+                <!-- Total Balance Card -->
+                <div class="stats-grid" style="margin-bottom: 24px;">
+                    <div class="stat-card">
+                        <div class="label">Gesamtvermögen</div>
+                        <div id="total-balance" class="value">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Anzahl Konten</div>
+                        <div id="account-count" class="value">-</div>
+                    </div>
+                </div>
+
+                <!-- Accounts List -->
+                <div id="accounts-list" class="accounts-grid">
+                    <div class="loading-overlay"><div class="spinner"></div></div>
+                </div>
+            </div>
+
             <!-- Import Page -->
             <div id="page-import" class="page hidden">
                 <div class="page-header">
@@ -315,6 +347,14 @@
 
                 <div class="card">
                     <div class="card-body">
+                        <div class="form-group" style="max-width: 300px; margin-bottom: 20px;">
+                            <label>Bank-Format</label>
+                            <select id="bank-format" class="form-control">
+                                <option value="auto">Automatisch erkennen</option>
+                                <option value="volksbank">Volksbank / VR-Bank</option>
+                                <option value="ing">ING</option>
+                            </select>
+                        </div>
                         <input type="file" id="file-input" accept=".csv" style="display: none;">
                         <div id="dropzone" class="dropzone">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -324,7 +364,7 @@
                             </svg>
                             <h4>CSV-Datei hierher ziehen</h4>
                             <p>oder klicken zum Auswählen</p>
-                            <p style="margin-top: 12px; font-size: 0.75rem;">Unterstützt: Volksbank/Atruvia CSV-Format</p>
+                            <p id="supported-formats-text" style="margin-top: 12px; font-size: 0.75rem;">Unterstützt: Volksbank, ING</p>
                         </div>
                     </div>
                 </div>
@@ -709,6 +749,7 @@
     <script src="/static/js/rules.js"></script>
     <script src="/static/js/import.js"></script>
     <script src="/static/js/statistics.js"></script>
+    <script src="/static/js/accounts.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
 </html>

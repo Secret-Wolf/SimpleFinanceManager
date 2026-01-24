@@ -1,23 +1,42 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
 from ..database import get_db
 from ..models import Import
-from ..services.csv_parser import import_csv
+from ..services.csv_parser import import_csv, SUPPORTED_FORMATS
 from ..services.categorizer import apply_rules_to_uncategorized
 from .. import schemas
 
 router = APIRouter(prefix="/api/import", tags=["import"])
 
 
+@router.get("/formats")
+def get_supported_formats():
+    """Get list of supported bank formats"""
+    return {
+        "formats": [
+            {"id": "auto", "name": "Automatisch erkennen", "description": "Format wird automatisch erkannt"},
+            {"id": "volksbank", "name": "Volksbank / VR-Bank", "description": "Atruvia CSV-Export"},
+            {"id": "ing", "name": "ING", "description": "ING Umsatzanzeige CSV"},
+        ]
+    }
+
+
 @router.post("", response_model=schemas.ImportResult)
 async def upload_csv(
     file: UploadFile = File(...),
+    bank_format: str = Query(default="auto", description="Bank format: auto, volksbank, ing"),
     auto_categorize: bool = True,
     db: Session = Depends(get_db)
 ):
     """Upload and import CSV file"""
+    # Validate bank format
+    if bank_format not in SUPPORTED_FORMATS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unbekanntes Bankformat: {bank_format}. Unterstützt: {', '.join(SUPPORTED_FORMATS)}"
+        )
 
     # Check file type
     if not file.filename.endswith(".csv"):
@@ -51,7 +70,7 @@ async def upload_csv(
 
     # Import CSV
     try:
-        import_result = import_csv(db, content_str, file.filename)
+        import_result = import_csv(db, content_str, file.filename, bank_format)
     except Exception as e:
         raise HTTPException(
             status_code=500,

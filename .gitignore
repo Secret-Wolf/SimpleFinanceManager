@@ -82,3 +82,6 @@ htmlcov/
 tmp/
 temp/
 *.tmp
+
+# Lokale Deployment-Anleitung (enthält interne IPs)
+DEPLOYMENT-LOKAL.md

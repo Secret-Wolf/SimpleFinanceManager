@@ -45,15 +45,17 @@ async function handleFileUpload(file) {
     }
 
     const dropzone = document.getElementById('dropzone');
+    const bankFormat = document.getElementById('bank-format').value;
     const originalContent = dropzone.innerHTML;
 
     dropzone.innerHTML = `
         <div class="spinner"></div>
         <h4>Importiere ${file.name}...</h4>
+        <p style="font-size: 0.875rem; color: var(--text-secondary);">Format: ${getBankFormatName(bankFormat)}</p>
     `;
 
     try {
-        const result = await api.uploadCSV(file);
+        const result = await api.uploadCSV(file, bankFormat);
 
         dropzone.innerHTML = `
             <svg viewBox="0 0 24 24" fill="none" stroke="var(--success-color)" stroke-width="2" style="width: 48px; height: 48px;">
@@ -101,8 +103,17 @@ function resetDropzone() {
         </svg>
         <h4>CSV-Datei hierher ziehen</h4>
         <p>oder klicken zum Auswählen</p>
-        <p style="margin-top: 12px; font-size: 0.75rem;">Unterstützt: Volksbank/Atruvia CSV-Format</p>
+        <p style="margin-top: 12px; font-size: 0.75rem;">Unterstützt: Volksbank, ING</p>
     `;
+}
+
+function getBankFormatName(format) {
+    const names = {
+        'auto': 'Automatisch erkennen',
+        'volksbank': 'Volksbank / VR-Bank',
+        'ing': 'ING'
+    };
+    return names[format] || format;
 }
 
 async function loadImportHistory() {
