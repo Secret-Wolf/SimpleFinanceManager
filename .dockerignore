@@ -1,0 +1,64 @@
+# Git
+.git
+.gitignore
+
+# Datenbank (wird als Volume gemountet)
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+ENV/
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# IDE / Editor
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Test / Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+
+# Sensible Daten
+.env
+.env.*
+*.env
+BankExports/
+*.csv
+
+# Dokumentation / Bilder (nicht im Container benötigt)
+Bilder/
+*.md
+LICENSE
+
+# Docker files (nicht im Image benötigt)
+Dockerfile
+docker-compose.yml
+.dockerignore

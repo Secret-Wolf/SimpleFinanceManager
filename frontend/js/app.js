@@ -40,6 +40,9 @@ function navigateTo(page) {
         case 'rules':
             loadRules();
             break;
+        case 'accounts':
+            loadAccounts();
+            break;
         case 'import':
             // Import page doesn't need initial load
             break;

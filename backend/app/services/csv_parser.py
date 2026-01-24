@@ -10,6 +10,9 @@ from sqlalchemy.exc import IntegrityError
 from ..models import Transaction, Account, Import
 
 
+# Supported bank formats
+SUPPORTED_FORMATS = ["auto", "volksbank", "ing"]
+
 # Volksbank CSV column mapping
 VOLKSBANK_COLUMNS = {
     "Bezeichnung Auftragskonto": "account_name",
@@ -29,6 +32,17 @@ VOLKSBANK_COLUMNS = {
     "Kategorie": "original_category",
     "Glaeubiger ID": "creditor_id",
     "Mandatsreferenz": "mandate_reference",
+}
+
+# ING CSV column mapping (Spalten in Zeile 14)
+ING_COLUMNS = {
+    "Buchung": "booking_date",
+    "Wertstellungsdatum": "value_date",
+    "Auftraggeber/Empfänger": "counterpart_name",
+    "Buchungstext": "booking_type",
+    "Verwendungszweck": "purpose",
+    "Saldo": "balance_after",
+    "Betrag": "amount",
 }
 
 
@@ -68,9 +82,91 @@ def detect_csv_format(content: str) -> str:
 
     if "Bezeichnung Auftragskonto" in first_line:
         return "volksbank"
-    # Add more formats here later
+
+    if "Umsatzanzeige" in first_line and "Datei erstellt am" in first_line:
+        return "ing"
 
     return "unknown"
+
+
+def parse_ing_header(content: str) -> Dict:
+    """Extract account metadata from ING CSV header (lines 1-13)"""
+    lines = content.split("\n")
+    header_data = {}
+
+    for line in lines[:13]:
+        if ";" in line:
+            parts = line.split(";")
+            key = parts[0].strip()
+            value = parts[1].strip() if len(parts) > 1 else ""
+
+            if key == "IBAN":
+                # Remove spaces from IBAN: "DE75 5001 0517 5456 5425 61" -> "DE75500105175456542561"
+                header_data["account_iban"] = value.replace(" ", "")
+            elif key == "Kontoname":
+                header_data["account_name"] = value
+            elif key == "Bank":
+                header_data["bank_name"] = value
+            elif key == "Kunde":
+                header_data["customer_name"] = value
+
+    return header_data
+
+
+def parse_ing_csv(content: str) -> List[Dict]:
+    """Parse ING CSV format"""
+    # Handle BOM if present
+    if content.startswith("\ufeff"):
+        content = content[1:]
+
+    # Extract header metadata
+    header_data = parse_ing_header(content)
+
+    # Find the data section (after the column headers)
+    lines = content.split("\n")
+    data_start = 0
+
+    for i, line in enumerate(lines):
+        if line.startswith("Buchung;Wertstellungsdatum;"):
+            data_start = i
+            break
+
+    if data_start == 0:
+        return []
+
+    # Parse CSV from data section
+    data_content = "\n".join(lines[data_start:])
+    reader = csv.DictReader(io.StringIO(data_content), delimiter=";")
+
+    rows = []
+    for csv_row in reader:
+        row = {}
+
+        # Add account info from header
+        row["account_iban"] = header_data.get("account_iban")
+        row["account_name"] = header_data.get("account_name")
+        row["bank_name"] = header_data.get("bank_name")
+
+        # Map columns
+        for csv_col, db_col in ING_COLUMNS.items():
+            value = csv_row.get(csv_col, "").strip()
+
+            if db_col in ("booking_date", "value_date"):
+                row[db_col] = parse_german_date(value)
+            elif db_col in ("amount", "balance_after"):
+                row[db_col] = parse_german_decimal(value)
+            else:
+                row[db_col] = value if value else None
+
+        # ING has currency in separate columns, default to EUR
+        row["currency"] = "EUR"
+
+        # Skip rows without required fields
+        if row.get("booking_date") and row.get("amount") is not None:
+            row["import_hash"] = generate_import_hash(row)
+            rows.append(row)
+
+    return rows
 
 
 def parse_volksbank_csv(content: str) -> List[Dict]:
@@ -124,15 +220,28 @@ def ensure_account_exists(db: Session, iban: str, name: str = None, bic: str = N
     return account
 
 
-def import_csv(db: Session, content: str, filename: str = None) -> Import:
-    """Import CSV content and return import result"""
-    # Detect format
-    csv_format = detect_csv_format(content)
+def import_csv(db: Session, content: str, filename: str = None, bank_format: str = "auto") -> Import:
+    """Import CSV content and return import result
 
-    if csv_format == "volksbank":
+    Args:
+        db: Database session
+        content: CSV file content as string
+        filename: Original filename
+        bank_format: Bank format - "auto", "volksbank", or "ing"
+    """
+    # Determine format
+    if bank_format == "auto":
+        csv_format = detect_csv_format(content)
+    else:
+        csv_format = bank_format
+
+    # Parse based on format
+    if csv_format == "ing":
+        rows = parse_ing_csv(content)
+    elif csv_format == "volksbank":
         rows = parse_volksbank_csv(content)
     else:
-        # Try Volksbank as default
+        # Try Volksbank as fallback for unknown formats
         rows = parse_volksbank_csv(content)
 
     # Track statistics
