@@ -99,15 +99,20 @@ async function showAccountDetail(accountId) {
     try {
         const account = await api.getAccount(accountId);
 
-        // Navigate to transactions filtered by this account
-        navigateTo('transactions');
+        // Set global account filter
+        selectedAccountId = accountId;
 
-        // Set account filter (we'll add this functionality)
-        const accountFilter = document.getElementById('tx-account-filter');
-        if (accountFilter) {
-            accountFilter.value = accountId;
-            applyTransactionFilters();
+        // Update dropdown to match
+        const dropdown = document.getElementById('global-account-filter');
+        if (dropdown) {
+            dropdown.value = accountId;
         }
+
+        // Reset transaction filters page
+        transactionFilters.page = 1;
+
+        // Navigate to transactions (will use selectedAccountId)
+        navigateTo('transactions');
 
         showToast(`Transaktionen für "${account.name}" werden angezeigt`, 'info');
 

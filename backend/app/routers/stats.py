@@ -62,9 +62,12 @@ def find_last_salary_date(db: Session) -> Optional[date]:
 
 
 @router.get("/summary", response_model=schemas.DashboardSummary)
-def get_summary(db: Session = Depends(get_db)):
+def get_summary(
+    account_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
     """Get dashboard summary data"""
-    return get_dashboard_summary(db)
+    return get_dashboard_summary(db, account_id=account_id)
 
 
 @router.get("/by-category", response_model=schemas.StatsByCategory)
@@ -72,6 +75,7 @@ def get_by_category(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     period: str = Query("month", regex="^(week|month|last_month|quarter|year|since_salary|custom)$"),
+    account_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
     """Get statistics grouped by category"""
@@ -113,7 +117,7 @@ def get_by_category(
         start_date = date(today.year, today.month, 1)
         end_date = today
 
-    return get_stats_by_category(db, start_date, end_date)
+    return get_stats_by_category(db, start_date, end_date, account_id=account_id)
 
 
 @router.get("/over-time", response_model=schemas.StatsOverTime)
@@ -122,6 +126,7 @@ def get_over_time(
     end_date: Optional[date] = None,
     period: str = Query("year", regex="^(month|last_month|quarter|year|since_salary|custom)$"),
     group_by: str = Query("month", regex="^(day|week|month)$"),
+    account_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
     """Get income/expenses over time"""
@@ -177,7 +182,7 @@ def get_over_time(
         start_date = date(today.year, 1, 1)
         end_date = today
 
-    return get_stats_over_time(db, start_date, end_date, group_by)
+    return get_stats_over_time(db, start_date, end_date, group_by, account_id=account_id)
 
 
 @router.get("/last-salary-date")

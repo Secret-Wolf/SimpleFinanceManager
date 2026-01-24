@@ -75,6 +75,46 @@ body {
     color: var(--primary-color);
 }
 
+/* Account Selector */
+.account-selector {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+    display: none; /* Hidden until accounts are loaded */
+}
+
+.account-selector label {
+    display: block;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.account-selector select {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+}
+
+.account-selector select:hover {
+    border-color: var(--primary-color);
+}
+
+.account-selector select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
 .sidebar-nav {
     flex: 1;
     padding: 12px;

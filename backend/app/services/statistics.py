@@ -9,14 +9,16 @@ from ..models import Transaction, Category
 from .. import schemas
 
 
-def get_current_balance(db: Session, account_iban: str = None) -> Optional[Decimal]:
+def get_current_balance(db: Session, account_id: int = None, account_iban: str = None) -> Optional[Decimal]:
     """Get balance from most recent transaction"""
     query = db.query(Transaction).filter(
         Transaction.balance_after != None,
         Transaction.is_split_parent == False
     )
 
-    if account_iban:
+    if account_id:
+        query = query.filter(Transaction.account_id == account_id)
+    elif account_iban:
         query = query.filter(Transaction.account_iban == account_iban)
 
     latest = query.order_by(Transaction.booking_date.desc(), Transaction.id.desc()).first()
@@ -28,6 +30,7 @@ def get_period_totals(
     db: Session,
     start_date: date,
     end_date: date,
+    account_id: int = None,
     account_iban: str = None
 ) -> Dict[str, Decimal]:
     """Get income and expenses for a period"""
@@ -38,7 +41,9 @@ def get_period_totals(
         Transaction.is_split_parent == False
     )
 
-    if account_iban:
+    if account_id:
+        query = query.filter(Transaction.account_id == account_id)
+    elif account_iban:
         query = query.filter(Transaction.account_iban == account_iban)
 
     transactions = query.all()
@@ -68,7 +73,8 @@ def get_top_categories(
     start_date: date,
     end_date: date,
     limit: int = 5,
-    expenses_only: bool = True
+    expenses_only: bool = True,
+    account_id: int = None
 ) -> List[Dict]:
     """Get top spending categories"""
 
@@ -84,6 +90,9 @@ def get_top_categories(
         Transaction.booking_date <= end_date,
         Transaction.is_split_parent == False
     )
+
+    if account_id:
+        query = query.filter(Transaction.account_id == account_id)
 
     if expenses_only:
         query = query.filter(Transaction.amount < 0)
@@ -103,31 +112,37 @@ def get_top_categories(
     ]
 
 
-def get_uncategorized_count(db: Session) -> int:
+def get_uncategorized_count(db: Session, account_id: int = None) -> int:
     """Count transactions without category"""
-    return db.query(Transaction).filter(
+    query = db.query(Transaction).filter(
         Transaction.category_id == None,
         Transaction.is_split_parent == False
-    ).count()
+    )
+    if account_id:
+        query = query.filter(Transaction.account_id == account_id)
+    return query.count()
 
 
-def get_recent_transactions(db: Session, limit: int = 10) -> List[Transaction]:
+def get_recent_transactions(db: Session, limit: int = 10, account_id: int = None) -> List[Transaction]:
     """Get most recent transactions"""
-    return db.query(Transaction).filter(
+    query = db.query(Transaction).filter(
         Transaction.is_split_parent == False
-    ).order_by(
+    )
+    if account_id:
+        query = query.filter(Transaction.account_id == account_id)
+    return query.order_by(
         Transaction.booking_date.desc(),
         Transaction.id.desc()
     ).limit(limit).all()
 
 
-def get_dashboard_summary(db: Session) -> schemas.DashboardSummary:
+def get_dashboard_summary(db: Session, account_id: int = None) -> schemas.DashboardSummary:
     """Get all dashboard data"""
     today = date.today()
 
     # Current month
     current_start, current_end = get_month_range(today.year, today.month)
-    current_totals = get_period_totals(db, current_start, current_end)
+    current_totals = get_period_totals(db, current_start, current_end, account_id=account_id)
 
     # Previous month
     if today.month == 1:
@@ -136,21 +151,21 @@ def get_dashboard_summary(db: Session) -> schemas.DashboardSummary:
         prev_year, prev_month = today.year, today.month - 1
 
     prev_start, prev_end = get_month_range(prev_year, prev_month)
-    prev_totals = get_period_totals(db, prev_start, prev_end)
+    prev_totals = get_period_totals(db, prev_start, prev_end, account_id=account_id)
 
     # Top categories for current month
-    top_cats = get_top_categories(db, current_start, current_end)
+    top_cats = get_top_categories(db, current_start, current_end, account_id=account_id)
 
     # Recent transactions
-    recent = get_recent_transactions(db)
+    recent = get_recent_transactions(db, account_id=account_id)
 
     return schemas.DashboardSummary(
-        current_balance=get_current_balance(db),
+        current_balance=get_current_balance(db, account_id=account_id),
         income_current_month=current_totals["income"],
         expenses_current_month=current_totals["expenses"],
         income_previous_month=prev_totals["income"],
         expenses_previous_month=prev_totals["expenses"],
-        uncategorized_count=get_uncategorized_count(db),
+        uncategorized_count=get_uncategorized_count(db, account_id=account_id),
         top_categories=top_cats,
         recent_transactions=recent
     )
@@ -160,12 +175,23 @@ def get_stats_by_category(
     db: Session,
     start_date: date,
     end_date: date,
-    include_income: bool = False
+    include_income: bool = False,
+    account_id: int = None
 ) -> schemas.StatsByCategory:
     """Get statistics grouped by category"""
 
     # Calculate months in period for average
     months = max(1, (end_date.year - start_date.year) * 12 + end_date.month - start_date.month + 1)
+
+    # Build join conditions
+    join_conditions = [
+        Transaction.category_id == Category.id,
+        Transaction.booking_date >= start_date,
+        Transaction.booking_date <= end_date,
+        Transaction.is_split_parent == False
+    ]
+    if account_id:
+        join_conditions.append(Transaction.account_id == account_id)
 
     query = db.query(
         Category.id,
@@ -176,12 +202,7 @@ def get_stats_by_category(
         func.count(Transaction.id).label("count")
     ).outerjoin(
         Transaction,
-        and_(
-            Transaction.category_id == Category.id,
-            Transaction.booking_date >= start_date,
-            Transaction.booking_date <= end_date,
-            Transaction.is_split_parent == False
-        )
+        and_(*join_conditions)
     ).group_by(Category.id).all()
 
     # Build category stats
@@ -207,7 +228,7 @@ def get_stats_by_category(
         ))
 
     # Add uncategorized
-    uncategorized = db.query(
+    uncat_query = db.query(
         func.sum(Transaction.amount).label("total"),
         func.count(Transaction.id).label("count")
     ).filter(
@@ -215,7 +236,10 @@ def get_stats_by_category(
         Transaction.booking_date >= start_date,
         Transaction.booking_date <= end_date,
         Transaction.is_split_parent == False
-    ).first()
+    )
+    if account_id:
+        uncat_query = uncat_query.filter(Transaction.account_id == account_id)
+    uncategorized = uncat_query.first()
 
     if uncategorized.count and uncategorized.count > 0:
         total = uncategorized.total or Decimal("0")
@@ -247,15 +271,19 @@ def get_stats_over_time(
     db: Session,
     start_date: date,
     end_date: date,
-    group_by: str = "month"  # "day", "week", "month"
+    group_by: str = "month",  # "day", "week", "month"
+    account_id: int = None
 ) -> schemas.StatsOverTime:
     """Get income/expenses over time"""
 
-    transactions = db.query(Transaction).filter(
+    query = db.query(Transaction).filter(
         Transaction.booking_date >= start_date,
         Transaction.booking_date <= end_date,
         Transaction.is_split_parent == False
-    ).order_by(Transaction.booking_date).all()
+    )
+    if account_id:
+        query = query.filter(Transaction.account_id == account_id)
+    transactions = query.order_by(Transaction.booking_date).all()
 
     # Group by period
     periods = {}

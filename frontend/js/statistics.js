@@ -66,6 +66,10 @@ async function loadCategoryStats() {
             params.start_date = customStatsStartDate;
             params.end_date = customStatsEndDate;
         }
+        // Add account filter if selected
+        if (selectedAccountId) {
+            params.account_id = selectedAccountId;
+        }
         const stats = await api.getStatsByCategory(params);
 
         // Render chart
@@ -130,6 +134,10 @@ async function loadTimeStats() {
         if (period === 'custom' && customStatsStartDate && customStatsEndDate) {
             params.start_date = customStatsStartDate;
             params.end_date = customStatsEndDate;
+        }
+        // Add account filter if selected
+        if (selectedAccountId) {
+            params.account_id = selectedAccountId;
         }
         const stats = await api.getStatsOverTime(params);
         renderTimeChart(stats.data);
@@ -312,6 +320,10 @@ async function exportStats() {
         if (period === 'custom' && customStatsStartDate && customStatsEndDate) {
             params.start_date = customStatsStartDate;
             params.end_date = customStatsEndDate;
+        }
+        // Add account filter if selected
+        if (selectedAccountId) {
+            params.account_id = selectedAccountId;
         }
         const stats = await api.getStatsByCategory(params);
 

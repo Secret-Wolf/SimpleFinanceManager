@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, case
 from typing import List
 from decimal import Decimal
 
@@ -54,8 +54,8 @@ def get_accounts_summary(db: Session = Depends(get_db)):
         first_of_month = today.replace(day=1)
 
         monthly_stats = db.query(
-            func.sum(func.case((Transaction.amount > 0, Transaction.amount), else_=0)).label('income'),
-            func.sum(func.case((Transaction.amount < 0, Transaction.amount), else_=0)).label('expenses')
+            func.sum(case((Transaction.amount > 0, Transaction.amount), else_=0)).label('income'),
+            func.sum(case((Transaction.amount < 0, Transaction.amount), else_=0)).label('expenses')
         ).filter(
             Transaction.account_id == account.id,
             Transaction.booking_date >= first_of_month

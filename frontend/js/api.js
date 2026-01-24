@@ -183,8 +183,11 @@ class ApiClient {
     }
 
     // Statistics
-    async getDashboardSummary() {
-        return this.request('/stats/summary');
+    async getDashboardSummary(accountId = null) {
+        const params = new URLSearchParams();
+        if (accountId) params.append('account_id', accountId);
+        const query = params.toString();
+        return this.request(`/stats/summary${query ? '?' + query : ''}`);
     }
 
     async getStatsByCategory(params = {}) {
@@ -195,6 +198,28 @@ class ApiClient {
     async getStatsOverTime(params = {}) {
         const query = new URLSearchParams(params);
         return this.request(`/stats/over-time?${query}`);
+    }
+
+    // Accounts
+    async getAccounts(includeInactive = false) {
+        return this.request(`/accounts?include_inactive=${includeInactive}`);
+    }
+
+    async getAccountsSummary() {
+        return this.request('/accounts/summary');
+    }
+
+    async getAccount(id) {
+        return this.request(`/accounts/${id}`);
+    }
+
+    async updateAccount(id, data) {
+        const params = new URLSearchParams();
+        if (data.name !== undefined) params.append('name', data.name);
+        if (data.is_active !== undefined) params.append('is_active', data.is_active);
+        return this.request(`/accounts/${id}?${params}`, {
+            method: 'PATCH'
+        });
     }
 }
 
