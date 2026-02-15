@@ -4,6 +4,28 @@ from decimal import Decimal
 from typing import Optional, List
 
 
+# Profile Schemas
+class ProfileCreate(BaseModel):
+    name: str
+    color: Optional[str] = "#2563eb"
+
+
+class ProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    color: Optional[str] = None
+
+
+class ProfileResponse(BaseModel):
+    id: int
+    name: str
+    color: str
+    is_admin: bool
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
 # Category Schemas
 class CategoryBase(BaseModel):
     name: str
@@ -55,6 +77,7 @@ class AccountCreate(AccountBase):
 class Account(AccountBase):
     id: int
     is_active: bool
+    profile_id: Optional[int] = None
     created_at: datetime
 
     class Config:
@@ -95,6 +118,12 @@ class TransactionUpdate(BaseModel):
     category_id: Optional[int] = None
     notes: Optional[str] = None
     tags: Optional[str] = None
+    is_shared: Optional[bool] = None
+
+
+class BulkSharedRequest(BaseModel):
+    transaction_ids: List[int]
+    is_shared: bool = True
 
 
 class Transaction(TransactionBase):
@@ -105,6 +134,7 @@ class Transaction(TransactionBase):
     account_iban: Optional[str] = None
     bank_name: Optional[str] = None
     is_split_parent: bool = False
+    is_shared: bool = False
     parent_transaction_id: Optional[int] = None
     original_category: Optional[str] = None
     creditor_id: Optional[str] = None
@@ -147,6 +177,7 @@ class RuleBase(BaseModel):
     match_amount_min: Optional[Decimal] = None
     match_amount_max: Optional[Decimal] = None
     assign_category_id: int
+    assign_shared: bool = False
     is_active: bool = True
 
 
@@ -164,6 +195,7 @@ class RuleUpdate(BaseModel):
     match_amount_min: Optional[Decimal] = None
     match_amount_max: Optional[Decimal] = None
     assign_category_id: Optional[int] = None
+    assign_shared: Optional[bool] = None
     is_active: Optional[bool] = None
 
 
@@ -198,6 +230,7 @@ class DashboardSummary(BaseModel):
     expenses_current_month: Decimal
     income_previous_month: Decimal
     expenses_previous_month: Decimal
+    shared_expenses_current_month: Decimal = Decimal("0")
     uncategorized_count: int
     top_categories: List[dict]
     recent_transactions: List[Transaction]
@@ -229,3 +262,17 @@ class StatsOverTime(BaseModel):
     data: List[TimeSeriesPoint]
     total_income: Decimal
     total_expenses: Decimal
+
+
+# Shared Statistics
+class ProfileExpenses(BaseModel):
+    profile_id: int
+    profile_name: str
+    profile_color: str
+    total_paid: Decimal
+
+
+class SharedSummary(BaseModel):
+    total_shared_expenses: Decimal
+    by_profile: List[ProfileExpenses]
+    by_category: List[CategoryStats]

@@ -34,6 +34,13 @@ async function loadTransactions() {
             params.account_id = selectedAccountId;
         }
 
+        // Add profile/shared filter
+        if (sharedMode) {
+            params.shared_only = true;
+        } else if (selectedProfileId) {
+            params.profile_id = selectedProfileId;
+        }
+
         const result = await api.getTransactions(params);
 
         if (result.items.length === 0) {
@@ -64,7 +71,10 @@ async function loadTransactions() {
                 </td>
                 <td>${formatDate(tx.booking_date)}</td>
                 <td>
-                    <div>${truncate(tx.counterpart_name || tx.booking_type || '-', 35)}</div>
+                    <div>
+                        ${tx.is_shared ? '<span class="shared-badge" title="Gemeinsame Ausgabe">G</span>' : ''}
+                        ${truncate(tx.counterpart_name || tx.booking_type || '-', 35)}
+                    </div>
                     <div style="font-size: 0.75rem; color: var(--text-muted)">${truncate(tx.purpose || '', 50)}</div>
                 </td>
                 <td>
@@ -182,6 +192,7 @@ function applyTransactionFilters() {
     const category = document.getElementById('tx-category-filter').value;
     const amountType = document.getElementById('tx-amount-type').value;
     const uncategorized = document.getElementById('uncategorized-filter').checked;
+    const sharedOnly = document.getElementById('shared-filter').checked;
 
     transactionFilters = {
         ...transactionFilters,
@@ -191,7 +202,8 @@ function applyTransactionFilters() {
         end_date: endDate,
         category_id: category,
         amount_type: amountType,
-        uncategorized_only: uncategorized
+        uncategorized_only: uncategorized,
+        shared_only: sharedOnly
     };
 
     loadTransactions();
@@ -226,6 +238,21 @@ async function bulkCategorize() {
     try {
         await api.bulkCategorize([...selectedTransactions], parseInt(categoryId));
         showToast(`${selectedTransactions.size} Transaktionen kategorisiert`, 'success');
+        selectedTransactions.clear();
+        updateBulkActions();
+        loadTransactions();
+    } catch (error) {
+        showToast('Fehler: ' + error.message, 'error');
+    }
+}
+
+async function bulkSetShared(isShared) {
+    if (selectedTransactions.size === 0) return;
+
+    try {
+        await api.bulkSetShared([...selectedTransactions], isShared);
+        const label = isShared ? 'als gemeinsam markiert' : 'als persoenlich markiert';
+        showToast(`${selectedTransactions.size} Transaktionen ${label}`, 'success');
         selectedTransactions.clear();
         updateBulkActions();
         loadTransactions();
@@ -269,6 +296,9 @@ async function showTransactionDetails(id) {
         notesInput.value = tx.notes || '';
         notesInput.dataset.id = tx.id;
 
+        // Shared checkbox
+        document.getElementById('detail-shared').checked = tx.is_shared || false;
+
         // Split button
         const splitBtn = document.getElementById('split-btn');
         if (tx.is_split_parent || tx.parent_transaction_id) {
@@ -288,14 +318,16 @@ async function showTransactionDetails(id) {
     }
 }
 
-async function saveTransactionNotes() {
+async function saveTransactionDetails() {
     const notesInput = document.getElementById('detail-notes');
     const id = parseInt(notesInput.dataset.id);
     const notes = notesInput.value;
+    const isShared = document.getElementById('detail-shared').checked;
 
     try {
-        await api.updateTransaction(id, { notes });
-        showToast('Notiz gespeichert', 'success');
+        await api.updateTransaction(id, { notes, is_shared: isShared });
+        showToast('Gespeichert', 'success');
+        loadTransactions();
     } catch (error) {
         showToast('Fehler: ' + error.message, 'error');
     }

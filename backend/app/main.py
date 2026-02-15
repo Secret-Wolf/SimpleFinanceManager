@@ -5,7 +5,8 @@ from fastapi.responses import FileResponse
 import os
 
 from .database import init_db
-from .routers import transactions, categories, rules, imports, stats, accounts
+from .migrations import run_migrations
+from .routers import transactions, categories, rules, imports, stats, accounts, profiles
 
 app = FastAPI(
     title="Finanzmanager",
@@ -29,6 +30,14 @@ app.include_router(rules.router)
 app.include_router(imports.router)
 app.include_router(stats.router)
 app.include_router(accounts.router)
+app.include_router(profiles.router)
+
+
+@app.get("/api/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "ok", "version": "1.0.0"}
+
 
 # Static files for frontend
 frontend_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "frontend")
@@ -52,9 +61,4 @@ if os.path.exists(frontend_path):
 async def startup_event():
     """Initialize database on startup"""
     init_db()
-
-
-@app.get("/api/health")
-async def health_check():
-    """Health check endpoint"""
-    return {"status": "ok", "version": "1.0.0"}
+    run_migrations()

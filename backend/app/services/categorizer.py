@@ -84,8 +84,9 @@ def match_rule(transaction: Transaction, rule: CategorizationRule) -> bool:
     return True
 
 
-def categorize_transaction(db: Session, transaction: Transaction) -> Optional[int]:
-    """Find matching category for a transaction based on rules"""
+def categorize_transaction(db: Session, transaction: Transaction) -> Optional[dict]:
+    """Find matching category and shared flag for a transaction based on rules.
+    Returns dict with category_id and assign_shared, or None."""
 
     # Get all active rules, ordered by priority (highest first)
     rules = db.query(CategorizationRule).filter(
@@ -94,7 +95,10 @@ def categorize_transaction(db: Session, transaction: Transaction) -> Optional[in
 
     for rule in rules:
         if match_rule(transaction, rule):
-            return rule.assign_category_id
+            return {
+                "category_id": rule.assign_category_id,
+                "assign_shared": rule.assign_shared
+            }
 
     return None
 
@@ -104,9 +108,11 @@ def apply_rules_to_transaction(db: Session, transaction: Transaction) -> bool:
     if transaction.category_id is not None:
         return False
 
-    category_id = categorize_transaction(db, transaction)
-    if category_id:
-        transaction.category_id = category_id
+    result = categorize_transaction(db, transaction)
+    if result:
+        transaction.category_id = result["category_id"]
+        if result["assign_shared"]:
+            transaction.is_shared = True
         return True
 
     return False

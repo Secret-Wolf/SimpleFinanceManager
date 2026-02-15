@@ -26,6 +26,8 @@ def get_transactions(
     include_subcategories: bool = True,
     account_id: Optional[int] = None,
     account_iban: Optional[str] = None,
+    profile_id: Optional[int] = None,
+    shared_only: bool = False,
     amount_type: Optional[str] = Query(None, regex="^(income|expenses|all)$"),
     search: Optional[str] = None,
     uncategorized_only: bool = False,
@@ -61,6 +63,17 @@ def get_transactions(
         query = query.filter(Transaction.account_id == account_id)
     elif account_iban:
         query = query.filter(Transaction.account_iban == account_iban)
+
+    # Profile filter: show transactions from accounts belonging to this profile
+    if profile_id:
+        profile_account_ids = [a.id for a in db.query(Account.id).filter(Account.profile_id == profile_id).all()]
+        if profile_account_ids:
+            query = query.filter(Transaction.account_id.in_(profile_account_ids))
+        else:
+            query = query.filter(Transaction.id == -1)  # No results
+
+    if shared_only:
+        query = query.filter(Transaction.is_shared == True)
 
     if amount_type == "income":
         query = query.filter(Transaction.amount > 0)
@@ -151,6 +164,9 @@ def update_transaction(
 
     if update.tags is not None:
         transaction.tags = update.tags
+
+    if update.is_shared is not None:
+        transaction.is_shared = update.is_shared
 
     db.commit()
     db.refresh(transaction)
@@ -298,6 +314,25 @@ def bulk_categorize(
     db.commit()
 
     return {"message": f"{updated} Transaktionen aktualisiert"}
+
+
+@router.post("/bulk-shared")
+def bulk_set_shared(
+    data: schemas.BulkSharedRequest,
+    db: Session = Depends(get_db)
+):
+    """Set shared flag on multiple transactions"""
+    updated = db.query(Transaction).filter(
+        Transaction.id.in_(data.transaction_ids)
+    ).update(
+        {"is_shared": data.is_shared},
+        synchronize_session=False
+    )
+
+    db.commit()
+
+    label = "als gemeinsam markiert" if data.is_shared else "als persönlich markiert"
+    return {"message": f"{updated} Transaktionen {label}", "updated_count": updated}
 
 
 @router.post("/manual", response_model=schemas.Transaction)

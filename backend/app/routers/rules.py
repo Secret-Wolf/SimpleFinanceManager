@@ -71,6 +71,7 @@ def create_rule(
         match_amount_min=rule_data.match_amount_min,
         match_amount_max=rule_data.match_amount_max,
         assign_category_id=rule_data.assign_category_id,
+        assign_shared=rule_data.assign_shared,
         is_active=rule_data.is_active
     )
 
@@ -127,6 +128,9 @@ def update_rule(
         if not category:
             raise HTTPException(status_code=400, detail="Kategorie nicht gefunden")
         rule.assign_category_id = update.assign_category_id
+
+    if update.assign_shared is not None:
+        rule.assign_shared = update.assign_shared
 
     if update.is_active is not None:
         rule.is_active = update.is_active

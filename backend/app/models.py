@@ -4,6 +4,18 @@ from sqlalchemy.sql import func
 from .database import Base
 
 
+class Profile(Base):
+    __tablename__ = "profiles"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, nullable=False, unique=True)
+    color = Column(String, default="#2563eb")
+    is_admin = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=func.now())
+
+    accounts = relationship("Account", back_populates="profile")
+
+
 class Account(Base):
     __tablename__ = "accounts"
 
@@ -14,9 +26,11 @@ class Account(Base):
     bank_name = Column(String)
     account_type = Column(String)  # "giro", "savings", "credit"
     is_active = Column(Boolean, default=True)
+    profile_id = Column(Integer, ForeignKey("profiles.id"), nullable=True)
     created_at = Column(DateTime, default=func.now())
 
     transactions = relationship("Transaction", back_populates="account")
+    profile = relationship("Profile", back_populates="accounts")
 
 
 class Category(Base):
@@ -73,6 +87,9 @@ class Transaction(Base):
     parent_transaction_id = Column(Integer, ForeignKey("transactions.id"))
     is_split_parent = Column(Boolean, default=False)
 
+    # Gemeinsame Ausgabe
+    is_shared = Column(Boolean, default=False)
+
     # Benutzerdaten
     notes = Column(Text)
     tags = Column(String)  # Komma-separiert
@@ -110,6 +127,7 @@ class CategorizationRule(Base):
 
     # Aktion
     assign_category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
+    assign_shared = Column(Boolean, default=False)
 
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())

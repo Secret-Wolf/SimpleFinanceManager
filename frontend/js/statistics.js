@@ -6,10 +6,20 @@ let customStatsStartDate = null;
 let customStatsEndDate = null;
 
 async function loadStatistics() {
-    await Promise.all([
-        loadCategoryStats(),
-        loadTimeStats()
-    ]);
+    const tasks = [loadCategoryStats(), loadTimeStats()];
+
+    // Load shared summary if in shared mode
+    if (sharedMode) {
+        tasks.push(loadSharedSummary());
+    }
+
+    // Show/hide shared summary section
+    const sharedSection = document.getElementById('shared-summary-section');
+    if (sharedSection) {
+        sharedSection.style.display = sharedMode ? 'block' : 'none';
+    }
+
+    await Promise.all(tasks);
 }
 
 function changeStatsPeriod() {
@@ -69,6 +79,12 @@ async function loadCategoryStats() {
         // Add account filter if selected
         if (selectedAccountId) {
             params.account_id = selectedAccountId;
+        }
+        // Add profile/shared filter
+        if (sharedMode) {
+            params.shared_only = true;
+        } else if (selectedProfileId) {
+            params.profile_id = selectedProfileId;
         }
         const stats = await api.getStatsByCategory(params);
 
@@ -138,6 +154,12 @@ async function loadTimeStats() {
         // Add account filter if selected
         if (selectedAccountId) {
             params.account_id = selectedAccountId;
+        }
+        // Add profile/shared filter
+        if (sharedMode) {
+            params.shared_only = true;
+        } else if (selectedProfileId) {
+            params.profile_id = selectedProfileId;
         }
         const stats = await api.getStatsOverTime(params);
         renderTimeChart(stats.data);
@@ -325,6 +347,12 @@ async function exportStats() {
         if (selectedAccountId) {
             params.account_id = selectedAccountId;
         }
+        // Add profile/shared filter
+        if (sharedMode) {
+            params.shared_only = true;
+        } else if (selectedProfileId) {
+            params.profile_id = selectedProfileId;
+        }
         const stats = await api.getStatsByCategory(params);
 
         // Create CSV
@@ -349,5 +377,81 @@ async function exportStats() {
 
     } catch (error) {
         showToast('Fehler: ' + error.message, 'error');
+    }
+}
+
+async function loadSharedSummary() {
+    const container = document.getElementById('shared-summary-content');
+    if (!container) return;
+
+    container.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
+
+    try {
+        const period = document.getElementById('stats-period').value;
+        const params = { period };
+        if (period === 'custom' && customStatsStartDate && customStatsEndDate) {
+            params.start_date = customStatsStartDate;
+            params.end_date = customStatsEndDate;
+        }
+
+        const summary = await api.getSharedSummary(params);
+
+        container.innerHTML = `
+            <div class="stats-grid" style="margin-bottom: 20px;">
+                <div class="stat-card shared-card">
+                    <div class="label">Gemeinsame Ausgaben gesamt</div>
+                    <div class="value negative">${formatCurrency(summary.total_shared_expenses)}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Pro Person</div>
+                    <div class="value negative">${formatCurrency(summary.total_shared_expenses / 2)}</div>
+                </div>
+            </div>
+
+            ${summary.by_profile && summary.by_profile.length > 0 ? `
+                <h4 style="margin-bottom: 12px; color: var(--text-secondary);">Wer hat bezahlt?</h4>
+                <div class="profiles-grid" style="margin-bottom: 20px;">
+                    ${summary.by_profile.map(p => `
+                        <div class="profile-card" style="border-left: 4px solid ${p.color || '#888'}; padding: 16px;">
+                            <strong>${p.profile_name}</strong>
+                            <div class="amount negative" style="font-size: 1.25rem; margin-top: 8px;">${formatCurrency(p.total_paid)}</div>
+                            <div style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 4px;">${p.transaction_count} Transaktionen</div>
+                        </div>
+                    `).join('')}
+                </div>
+            ` : ''}
+
+            ${summary.by_category && summary.by_category.length > 0 ? `
+                <h4 style="margin-bottom: 12px; color: var(--text-secondary);">Nach Kategorie</h4>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Kategorie</th>
+                                <th class="text-right">Summe</th>
+                                <th class="text-right">Anzahl</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${summary.by_category.map(cat => `
+                                <tr>
+                                    <td>
+                                        <span class="category-badge">
+                                            <span class="dot" style="background-color: ${cat.category_color || '#888'}"></span>
+                                            ${cat.category_name}
+                                        </span>
+                                    </td>
+                                    <td class="text-right amount negative">${formatCurrency(cat.total)}</td>
+                                    <td class="text-right">${cat.transaction_count}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            ` : ''}
+        `;
+
+    } catch (error) {
+        container.innerHTML = `<p style="color: var(--danger-color)">Fehler: ${error.message}</p>`;
     }
 }

@@ -5,6 +5,8 @@ let currentPage = 'dashboard';
 let categories = [];
 let flatCategories = [];
 let selectedAccountId = null; // null = Alle Konten
+let selectedProfileId = null; // null = Alle Profile
+let sharedMode = false; // true = "Gemeinsamer Haushalt" view
 let accounts = [];
 
 // Navigation
@@ -51,6 +53,9 @@ function navigateTo(page) {
         case 'statistics':
             loadStatistics();
             break;
+        case 'profiles':
+            loadProfileManagement();
+            break;
     }
 }
 
@@ -58,6 +63,9 @@ function navigateTo(page) {
 async function init() {
     // Load categories for global use
     await loadCategoriesData();
+
+    // Load profiles and populate filter dropdown
+    await loadProfilesDropdown();
 
     // Load accounts and populate filter dropdown
     await loadAccountsDropdown();
@@ -137,10 +145,12 @@ async function loadDashboard() {
     container.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
 
     try {
-        const summary = await api.getDashboardSummary(selectedAccountId);
+        const summary = await api.getDashboardSummary(selectedAccountId, selectedProfileId);
 
         const incomeChange = percentChange(summary.income_current_month, summary.income_previous_month);
         const expenseChange = percentChange(summary.expenses_current_month, summary.expenses_previous_month);
+
+        const sharedExpenses = summary.shared_expenses_current_month || 0;
 
         container.innerHTML = `
             <div class="stats-grid">
@@ -164,6 +174,13 @@ async function loadDashboard() {
                     <div class="label">Unkategorisiert</div>
                     <div class="value" style="color: var(--warning-color)">${summary.uncategorized_count}</div>
                 </div>
+                ${sharedExpenses !== 0 ? `
+                <div class="stat-card shared-card">
+                    <div class="label">Gemeinsame Ausgaben (Monat)</div>
+                    <div class="value negative">${formatCurrency(sharedExpenses)}</div>
+                    <div class="change" style="color: var(--text-secondary)">Pro Person: ~${formatCurrency(sharedExpenses / 2)}</div>
+                </div>
+                ` : ''}
             </div>
 
             <div class="flex gap-4" style="flex-wrap: wrap;">
@@ -231,18 +248,31 @@ async function loadDashboard() {
         `;
 
         // Update nav badge
-        const badge = document.querySelector('.nav-badge');
-        if (badge) {
-            if (summary.uncategorized_count > 0) {
-                badge.textContent = summary.uncategorized_count;
-                badge.classList.remove('hidden');
-            } else {
-                badge.classList.add('hidden');
-            }
-        }
+        updateNavBadge(summary.uncategorized_count);
 
     } catch (error) {
         container.innerHTML = `<div class="empty-state"><p>Fehler beim Laden: ${error.message}</p></div>`;
+    }
+}
+
+function updateNavBadge(count) {
+    const badge = document.querySelector('.nav-badge');
+    if (badge) {
+        if (count > 0) {
+            badge.textContent = count;
+            badge.classList.remove('hidden');
+        } else {
+            badge.classList.add('hidden');
+        }
+    }
+}
+
+async function refreshNavBadge() {
+    try {
+        const summary = await api.getDashboardSummary(selectedAccountId, selectedProfileId);
+        updateNavBadge(summary.uncategorized_count);
+    } catch (e) {
+        // Silently fail
     }
 }
 
