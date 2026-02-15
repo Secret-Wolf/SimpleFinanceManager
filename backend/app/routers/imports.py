@@ -28,6 +28,7 @@ async def upload_csv(
     file: UploadFile = File(...),
     bank_format: str = Query(default="auto", description="Bank format: auto, volksbank, ing"),
     auto_categorize: bool = True,
+    profile_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
     """Upload and import CSV file"""
@@ -70,7 +71,7 @@ async def upload_csv(
 
     # Import CSV
     try:
-        import_result = import_csv(db, content_str, file.filename, bank_format)
+        import_result = import_csv(db, content_str, file.filename, bank_format, profile_id=profile_id)
     except Exception as e:
         raise HTTPException(
             status_code=500,

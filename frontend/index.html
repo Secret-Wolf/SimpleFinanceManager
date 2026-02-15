@@ -13,6 +13,13 @@
             <div class="sidebar-header">
                 <h1>Finanzmanager</h1>
             </div>
+            <!-- Profile Selector -->
+            <div class="profile-selector" style="display: none;">
+                <label>Profil</label>
+                <select id="global-profile-filter" onchange="onProfileFilterChange()">
+                    <option value="">Alle Profile</option>
+                </select>
+            </div>
             <!-- Account Selector -->
             <div class="account-selector">
                 <label>Konto</label>
@@ -76,6 +83,15 @@
                         <line x1="12" y1="3" x2="12" y2="15"></line>
                     </svg>
                     <span>Import</span>
+                </a>
+                <a class="nav-item" data-page="profiles">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                    <span>Profile</span>
                 </a>
             </nav>
         </aside>
@@ -143,6 +159,11 @@
                         <input type="checkbox" id="uncategorized-filter" onchange="applyTransactionFilters()">
                         <span>Nur unkategorisiert</span>
                     </label>
+
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <input type="checkbox" id="shared-filter" onchange="applyTransactionFilters()">
+                        <span>Nur gemeinsame</span>
+                    </label>
                 </div>
 
                 <!-- Bulk Actions -->
@@ -153,6 +174,8 @@
                             <option value="">Kategorie wählen</option>
                         </select>
                         <button class="btn btn-primary btn-sm" onclick="bulkCategorize()">Kategorie zuweisen</button>
+                        <button class="btn btn-secondary btn-sm" onclick="bulkSetShared(true)">Gemeinsam markieren</button>
+                        <button class="btn btn-secondary btn-sm" onclick="bulkSetShared(false)">Persoenlich markieren</button>
                         <button class="btn btn-secondary btn-sm" onclick="selectedTransactions.clear(); updateBulkActions(); loadTransactions();">Auswahl aufheben</button>
                     </div>
                 </div>
@@ -308,6 +331,17 @@
                     </div>
                 </div>
 
+                <!-- Shared Summary (only visible in shared mode) -->
+                <div id="shared-summary-section" class="card mt-4" style="display: none;">
+                    <div class="card-header">
+                        <h3>Gemeinsame Ausgaben - Aufteilung</h3>
+                    </div>
+                    <div class="card-body">
+                        <div id="shared-summary-content">
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Detailed Table -->
                 <div class="card mt-4">
                     <div class="card-header">
@@ -345,6 +379,18 @@
                 </div>
             </div>
 
+            <!-- Profiles Page -->
+            <div id="page-profiles" class="page hidden">
+                <div class="page-header">
+                    <h2>Profile</h2>
+                    <p>Profile und Konten-Zuordnung verwalten</p>
+                </div>
+
+                <div id="profiles-content">
+                    <div class="loading-overlay"><div class="spinner"></div></div>
+                </div>
+            </div>
+
             <!-- Import Page -->
             <div id="page-import" class="page hidden">
                 <div class="page-header">
@@ -354,13 +400,21 @@
 
                 <div class="card">
                     <div class="card-body">
-                        <div class="form-group" style="max-width: 300px; margin-bottom: 20px;">
-                            <label>Bank-Format</label>
-                            <select id="bank-format" class="form-control">
-                                <option value="auto">Automatisch erkennen</option>
-                                <option value="volksbank">Volksbank / VR-Bank</option>
-                                <option value="ing">ING</option>
-                            </select>
+                        <div class="flex gap-4" style="flex-wrap: wrap; margin-bottom: 20px;">
+                            <div class="form-group" style="max-width: 300px; margin-bottom: 0;">
+                                <label>Bank-Format</label>
+                                <select id="bank-format" class="form-control">
+                                    <option value="auto">Automatisch erkennen</option>
+                                    <option value="volksbank">Volksbank / VR-Bank</option>
+                                    <option value="ing">ING</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="max-width: 300px; margin-bottom: 0;">
+                                <label>Profil zuordnen</label>
+                                <select id="import-profile" class="form-control">
+                                    <option value="">Kein Profil</option>
+                                </select>
+                            </div>
                         </div>
                         <input type="file" id="file-input" accept=".csv" style="display: none;">
                         <div id="dropzone" class="dropzone">
@@ -428,11 +482,16 @@
                     <label>Notizen</label>
                     <textarea id="detail-notes" class="form-control" rows="3" placeholder="Notizen zur Transaktion..."></textarea>
                 </div>
+
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 12px;">
+                    <input type="checkbox" id="detail-shared">
+                    <span>Gemeinsame Ausgabe</span>
+                </label>
             </div>
             <div class="modal-footer">
                 <button id="split-btn" class="btn btn-secondary">Aufteilen</button>
                 <button id="create-rule-btn" class="btn btn-secondary">Regel erstellen</button>
-                <button class="btn btn-primary" onclick="saveTransactionNotes(); closeModal('transaction-detail-modal')">Speichern</button>
+                <button class="btn btn-primary" onclick="saveTransactionDetails(); closeModal('transaction-detail-modal')">Speichern</button>
             </div>
         </div>
     </div>
@@ -673,6 +732,11 @@
                         <input type="checkbox" id="rule-active" checked>
                         <span>Regel aktiv</span>
                     </label>
+
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 12px;">
+                        <input type="checkbox" id="rule-assign-shared">
+                        <span>Automatisch als gemeinsame Ausgabe markieren</span>
+                    </label>
                 </form>
             </div>
             <div class="modal-footer">
@@ -745,6 +809,36 @@
         </div>
     </div>
 
+    <!-- Profile Modal -->
+    <div id="profile-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="profile-modal-title">Neues Profil</h3>
+                <button class="modal-close" onclick="closeModal('profile-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="profile-id">
+                <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" id="profile-name" class="form-control" placeholder="z.B. Sabrina" required>
+                </div>
+                <div class="form-group">
+                    <label>Farbe</label>
+                    <input type="color" id="profile-color" class="form-control" value="#2563eb" style="height: 40px; padding: 4px;">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('profile-modal')">Abbrechen</button>
+                <button class="btn btn-primary" onclick="saveProfile()">Speichern</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Container -->
     <div id="toast-container" class="toast-container"></div>
 
@@ -757,6 +851,7 @@
     <script src="/static/js/import.js"></script>
     <script src="/static/js/statistics.js"></script>
     <script src="/static/js/accounts.js"></script>
+    <script src="/static/js/profiles.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
 </html>

@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
-from typing import List
+from typing import List, Optional
 from decimal import Decimal
 
 from ..database import get_db
@@ -14,22 +14,32 @@ router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 @router.get("", response_model=List[schemas.Account])
 def get_accounts(
     include_inactive: bool = False,
+    profile_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
-    """Get all accounts"""
+    """Get all accounts, optionally filtered by profile"""
     query = db.query(Account)
 
     if not include_inactive:
         query = query.filter(Account.is_active == True)
+
+    if profile_id:
+        query = query.filter(Account.profile_id == profile_id)
 
     accounts = query.order_by(Account.name).all()
     return accounts
 
 
 @router.get("/summary")
-def get_accounts_summary(db: Session = Depends(get_db)):
+def get_accounts_summary(
+    profile_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
     """Get summary of all active accounts with balances"""
-    accounts = db.query(Account).filter(Account.is_active == True).all()
+    query = db.query(Account).filter(Account.is_active == True)
+    if profile_id:
+        query = query.filter(Account.profile_id == profile_id)
+    accounts = query.all()
 
     result = []
     total_balance = Decimal("0")
@@ -70,6 +80,7 @@ def get_accounts_summary(db: Session = Depends(get_db)):
             "iban": account.iban,
             "bank_name": account.bank_name,
             "account_type": account.account_type,
+            "profile_id": account.profile_id,
             "balance": balance,
             "transaction_count": tx_count,
             "income_this_month": monthly_stats.income or Decimal("0"),
@@ -116,6 +127,7 @@ def get_account(account_id: int, db: Session = Depends(get_db)):
         "bank_name": account.bank_name,
         "account_type": account.account_type,
         "is_active": account.is_active,
+        "profile_id": account.profile_id,
         "created_at": account.created_at,
         "balance": latest_tx.balance_after if latest_tx else None,
         "transaction_count": tx_count,
@@ -129,9 +141,10 @@ def update_account(
     account_id: int,
     name: str = None,
     is_active: bool = None,
+    profile_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
-    """Update account (name, active status)"""
+    """Update account (name, active status, profile assignment)"""
     account = db.query(Account).filter(Account.id == account_id).first()
 
     if not account:
@@ -142,6 +155,16 @@ def update_account(
 
     if is_active is not None:
         account.is_active = is_active
+
+    if profile_id is not None:
+        from ..models import Profile
+        if profile_id == 0:
+            account.profile_id = None
+        else:
+            profile = db.query(Profile).filter(Profile.id == profile_id).first()
+            if not profile:
+                raise HTTPException(status_code=400, detail="Profil nicht gefunden")
+            account.profile_id = profile_id
 
     db.commit()
     db.refresh(account)

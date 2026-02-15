@@ -54,6 +54,7 @@ async function loadRules() {
                                     <span style="color: ${rule.is_active ? 'var(--success-color)' : 'var(--text-muted)'}">
                                         ${rule.is_active ? 'Aktiv' : 'Inaktiv'}
                                     </span>
+                                    ${rule.assign_shared ? '<span class="shared-badge" title="Markiert als gemeinsam" style="margin-left: 4px;">G</span>' : ''}
                                 </td>
                                 <td>
                                     <div class="flex gap-2">
@@ -122,6 +123,7 @@ function showAddRuleModal() {
     document.getElementById('rule-form').reset();
     document.getElementById('rule-id').value = '';
     document.getElementById('rule-active').checked = true;
+    document.getElementById('rule-assign-shared').checked = false;
 
     // Update category select
     document.getElementById('rule-assign-category').innerHTML = `
@@ -147,6 +149,7 @@ async function editRule(id) {
         document.getElementById('rule-amount-min').value = rule.match_amount_min || '';
         document.getElementById('rule-amount-max').value = rule.match_amount_max || '';
         document.getElementById('rule-active').checked = rule.is_active;
+        document.getElementById('rule-assign-shared').checked = rule.assign_shared || false;
 
         // Update category select
         document.getElementById('rule-assign-category').innerHTML = `
@@ -186,11 +189,14 @@ async function saveRule() {
         return;
     }
 
+    const assignShared = document.getElementById('rule-assign-shared').checked;
+
     const data = {
         name: name || null,
         priority,
         assign_category_id: parseInt(categoryId),
         is_active: isActive,
+        assign_shared: assignShared,
         match_counterpart_name: counterpart || null,
         match_counterpart_iban: iban || null,
         match_purpose: purpose || null,

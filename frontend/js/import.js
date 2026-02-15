@@ -4,6 +4,9 @@ function initImportPage() {
     const dropzone = document.getElementById('dropzone');
     const fileInput = document.getElementById('file-input');
 
+    // Populate import profile dropdown
+    populateImportProfileDropdown();
+
     // Drag and drop events
     dropzone.addEventListener('dragover', (e) => {
         e.preventDefault();
@@ -46,6 +49,9 @@ async function handleFileUpload(file) {
 
     const dropzone = document.getElementById('dropzone');
     const bankFormat = document.getElementById('bank-format').value;
+    const importProfileSelect = document.getElementById('import-profile');
+    // Use import dropdown value, fallback to global profile filter
+    const profileId = (importProfileSelect && importProfileSelect.value) ? importProfileSelect.value : (selectedProfileId || null);
     const originalContent = dropzone.innerHTML;
 
     dropzone.innerHTML = `
@@ -55,7 +61,7 @@ async function handleFileUpload(file) {
     `;
 
     try {
-        const result = await api.uploadCSV(file, bankFormat);
+        const result = await api.uploadCSV(file, bankFormat, true, profileId || null);
 
         dropzone.innerHTML = `
             <svg viewBox="0 0 24 24" fill="none" stroke="var(--success-color)" stroke-width="2" style="width: 48px; height: 48px;">
@@ -177,6 +183,18 @@ function getStatusText(status) {
         case 'failed': return 'Fehlgeschlagen';
         default: return status;
     }
+}
+
+function populateImportProfileDropdown() {
+    const dropdown = document.getElementById('import-profile');
+    if (!dropdown || !profiles || profiles.length === 0) return;
+
+    dropdown.innerHTML = `
+        <option value="">Kein Profil</option>
+        ${profiles.map(p => `
+            <option value="${p.id}" ${selectedProfileId === p.id ? 'selected' : ''}>${p.name}${p.is_admin ? ' (Admin)' : ''}</option>
+        `).join('')}
+    `;
 }
 
 // Initialize when page loads

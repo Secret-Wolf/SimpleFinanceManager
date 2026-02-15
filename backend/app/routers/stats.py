@@ -7,11 +7,12 @@ from calendar import monthrange
 from dateutil.relativedelta import relativedelta
 
 from ..database import get_db
-from ..models import Transaction, Category
+from ..models import Transaction, Category, Account
 from ..services.statistics import (
     get_dashboard_summary,
     get_stats_by_category,
-    get_stats_over_time
+    get_stats_over_time,
+    get_shared_summary
 )
 from .. import schemas
 
@@ -64,10 +65,11 @@ def find_last_salary_date(db: Session) -> Optional[date]:
 @router.get("/summary", response_model=schemas.DashboardSummary)
 def get_summary(
     account_id: Optional[int] = None,
+    profile_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
     """Get dashboard summary data"""
-    return get_dashboard_summary(db, account_id=account_id)
+    return get_dashboard_summary(db, account_id=account_id, profile_id=profile_id)
 
 
 @router.get("/by-category", response_model=schemas.StatsByCategory)
@@ -76,6 +78,8 @@ def get_by_category(
     end_date: Optional[date] = None,
     period: str = Query("month", regex="^(week|month|last_month|quarter|year|since_salary|custom)$"),
     account_id: Optional[int] = None,
+    profile_id: Optional[int] = None,
+    shared_only: bool = False,
     db: Session = Depends(get_db)
 ):
     """Get statistics grouped by category"""
@@ -117,7 +121,7 @@ def get_by_category(
         start_date = date(today.year, today.month, 1)
         end_date = today
 
-    return get_stats_by_category(db, start_date, end_date, account_id=account_id)
+    return get_stats_by_category(db, start_date, end_date, account_id=account_id, profile_id=profile_id, shared_only=shared_only)
 
 
 @router.get("/over-time", response_model=schemas.StatsOverTime)
@@ -127,6 +131,8 @@ def get_over_time(
     period: str = Query("year", regex="^(month|last_month|quarter|year|since_salary|custom)$"),
     group_by: str = Query("month", regex="^(day|week|month)$"),
     account_id: Optional[int] = None,
+    profile_id: Optional[int] = None,
+    shared_only: bool = False,
     db: Session = Depends(get_db)
 ):
     """Get income/expenses over time"""
@@ -182,7 +188,52 @@ def get_over_time(
         start_date = date(today.year, 1, 1)
         end_date = today
 
-    return get_stats_over_time(db, start_date, end_date, group_by, account_id=account_id)
+    return get_stats_over_time(db, start_date, end_date, group_by, account_id=account_id, profile_id=profile_id, shared_only=shared_only)
+
+
+@router.get("/shared-summary", response_model=schemas.SharedSummary)
+def get_shared_stats(
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    period: str = Query("month", regex="^(week|month|last_month|quarter|year|since_salary|custom)$"),
+    db: Session = Depends(get_db)
+):
+    """Get shared expenses summary across all profiles"""
+    today = date.today()
+
+    if period == "custom" and start_date and end_date:
+        pass
+    elif period == "week":
+        start_date = today - timedelta(days=today.weekday())
+        end_date = today
+    elif period == "month":
+        start_date = date(today.year, today.month, 1)
+        end_date = today
+    elif period == "last_month":
+        last_month = today - relativedelta(months=1)
+        start_date = date(last_month.year, last_month.month, 1)
+        _, last_day = monthrange(last_month.year, last_month.month)
+        end_date = date(last_month.year, last_month.month, last_day)
+    elif period == "quarter":
+        quarter_month = ((today.month - 1) // 3) * 3 + 1
+        start_date = date(today.year, quarter_month, 1)
+        end_date = today
+    elif period == "year":
+        start_date = date(today.year, 1, 1)
+        end_date = today
+    elif period == "since_salary":
+        salary_date = find_last_salary_date(db)
+        if salary_date:
+            start_date = salary_date
+            end_date = today
+        else:
+            start_date = date(today.year, today.month, 1)
+            end_date = today
+    else:
+        start_date = date(today.year, today.month, 1)
+        end_date = today
+
+    return get_shared_summary(db, start_date, end_date)
 
 
 @router.get("/last-salary-date")
