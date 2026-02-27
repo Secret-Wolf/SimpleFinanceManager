@@ -170,3 +170,4 @@ class Import(Base):
     transactions_duplicate = Column(Integer)
     transactions_error = Column(Integer, default=0)
     status = Column(String)  # "success", "partial", "failed"
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)

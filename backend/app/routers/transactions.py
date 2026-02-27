@@ -135,10 +135,15 @@ def get_transactions(
 @router.get("/{transaction_id}", response_model=schemas.Transaction)
 def get_transaction(transaction_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Get single transaction by ID"""
+    user_account_ids = [a.id for a in db.query(Account.id).filter(Account.user_id == current_user.id).all()]
+
     transaction = db.query(Transaction).options(
         joinedload(Transaction.category),
         joinedload(Transaction.split_children)
-    ).filter(Transaction.id == transaction_id).first()
+    ).filter(
+        Transaction.id == transaction_id,
+        Transaction.account_id.in_(user_account_ids) if user_account_ids else Transaction.id == -1,
+    ).first()
 
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaktion nicht gefunden")
@@ -154,7 +159,12 @@ def update_transaction(
     current_user: User = Depends(get_current_user),
 ):
     """Update transaction (category, notes, tags)"""
-    transaction = db.query(Transaction).filter(Transaction.id == transaction_id).first()
+    user_account_ids = [a.id for a in db.query(Account.id).filter(Account.user_id == current_user.id).all()]
+
+    transaction = db.query(Transaction).filter(
+        Transaction.id == transaction_id,
+        Transaction.account_id.in_(user_account_ids) if user_account_ids else Transaction.id == -1,
+    ).first()
 
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaktion nicht gefunden")
@@ -192,7 +202,12 @@ def split_transaction(
     current_user: User = Depends(get_current_user),
 ):
     """Split a transaction into multiple parts"""
-    transaction = db.query(Transaction).filter(Transaction.id == transaction_id).first()
+    user_account_ids = [a.id for a in db.query(Account.id).filter(Account.user_id == current_user.id).all()]
+
+    transaction = db.query(Transaction).filter(
+        Transaction.id == transaction_id,
+        Transaction.account_id.in_(user_account_ids) if user_account_ids else Transaction.id == -1,
+    ).first()
 
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaktion nicht gefunden")
@@ -270,7 +285,12 @@ def split_transaction(
 @router.delete("/{transaction_id}")
 def delete_transaction(transaction_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Delete a transaction"""
-    transaction = db.query(Transaction).filter(Transaction.id == transaction_id).first()
+    user_account_ids = [a.id for a in db.query(Account.id).filter(Account.user_id == current_user.id).all()]
+
+    transaction = db.query(Transaction).filter(
+        Transaction.id == transaction_id,
+        Transaction.account_id.in_(user_account_ids) if user_account_ids else Transaction.id == -1,
+    ).first()
 
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaktion nicht gefunden")
@@ -323,8 +343,11 @@ def bulk_categorize(
         if not category:
             raise HTTPException(status_code=400, detail="Kategorie nicht gefunden")
 
+    user_account_ids = [a.id for a in db.query(Account.id).filter(Account.user_id == current_user.id).all()]
+
     updated = db.query(Transaction).filter(
-        Transaction.id.in_(transaction_ids)
+        Transaction.id.in_(transaction_ids),
+        Transaction.account_id.in_(user_account_ids) if user_account_ids else Transaction.id == -1,
     ).update(
         {"category_id": category_id if category_id != 0 else None},
         synchronize_session=False
@@ -342,8 +365,11 @@ def bulk_set_shared(
     current_user: User = Depends(get_current_user),
 ):
     """Set shared flag on multiple transactions"""
+    user_account_ids = [a.id for a in db.query(Account.id).filter(Account.user_id == current_user.id).all()]
+
     updated = db.query(Transaction).filter(
-        Transaction.id.in_(data.transaction_ids)
+        Transaction.id.in_(data.transaction_ids),
+        Transaction.account_id.in_(user_account_ids) if user_account_ids else Transaction.id == -1,
     ).update(
         {"is_shared": data.is_shared},
         synchronize_session=False

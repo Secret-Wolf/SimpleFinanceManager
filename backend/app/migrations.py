@@ -168,4 +168,15 @@ def run_migrations():
                     conn.commit()
                     logger.info(f"Migration: user_id added to {table_name}")
 
+        # Migration 10: Add user_id to imports
+        if 'imports' in inspector.get_table_names():
+            columns = [col['name'] for col in inspector.get_columns('imports')]
+            if 'user_id' not in columns:
+                logger.info("Migration: Adding user_id to imports")
+                conn.execute(text(
+                    "ALTER TABLE imports ADD COLUMN user_id INTEGER REFERENCES users(id)"
+                ))
+                conn.commit()
+                logger.info("Migration: user_id added to imports")
+
         logger.info("All migrations completed")

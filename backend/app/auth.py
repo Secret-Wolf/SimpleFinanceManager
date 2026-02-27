@@ -5,38 +5,37 @@ from typing import Optional
 
 from fastapi import Depends, HTTPException, Request, Response, status
 from fastapi.security import APIKeyCookie
-from jose import JWTError, jwt
-from passlib.context import CryptContext
+import jwt as pyjwt
+from jwt import PyJWTError
+import bcrypt
 from sqlalchemy.orm import Session
 
 from .config import settings
 from .database import get_db
 from .models import User
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 cookie_scheme = APIKeyCookie(name="access_token", auto_error=False)
 refresh_cookie_scheme = APIKeyCookie(name="refresh_token", auto_error=False)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
 
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def create_access_token(user_id: int) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode = {"sub": str(user_id), "exp": expire, "type": "access"}
-    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+    return pyjwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
 def create_refresh_token(user_id: int) -> str:
     expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     to_encode = {"sub": str(user_id), "exp": expire, "type": "refresh"}
-    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+    return pyjwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
 def set_auth_cookies(response: Response, user_id: int):
@@ -73,14 +72,14 @@ def clear_auth_cookies(response: Response):
 def _decode_token(token: str, expected_type: str) -> Optional[int]:
     """Decode and validate a JWT token, returning the user_id or None"""
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+        payload = pyjwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
         if payload.get("type") != expected_type:
             return None
         user_id = payload.get("sub")
         if user_id is None:
             return None
         return int(user_id)
-    except (JWTError, ValueError):
+    except (PyJWTError, ValueError):
         return None
 
 

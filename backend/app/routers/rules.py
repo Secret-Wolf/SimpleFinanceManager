@@ -16,6 +16,8 @@ def get_rules(db: Session = Depends(get_db), current_user: User = Depends(get_cu
     """Get all categorization rules"""
     rules = db.query(CategorizationRule).options(
         joinedload(CategorizationRule.category)
+    ).filter(
+        CategorizationRule.user_id == current_user.id
     ).order_by(CategorizationRule.priority.desc()).all()
 
     return rules
@@ -26,7 +28,10 @@ def get_rule(rule_id: int, db: Session = Depends(get_db), current_user: User = D
     """Get single rule"""
     rule = db.query(CategorizationRule).options(
         joinedload(CategorizationRule.category)
-    ).filter(CategorizationRule.id == rule_id).first()
+    ).filter(
+        CategorizationRule.id == rule_id,
+        CategorizationRule.user_id == current_user.id,
+    ).first()
 
     if not rule:
         raise HTTPException(status_code=404, detail="Regel nicht gefunden")
@@ -98,7 +103,10 @@ def update_rule(
     current_user: User = Depends(get_current_user),
 ):
     """Update rule"""
-    rule = db.query(CategorizationRule).filter(CategorizationRule.id == rule_id).first()
+    rule = db.query(CategorizationRule).filter(
+        CategorizationRule.id == rule_id,
+        CategorizationRule.user_id == current_user.id,
+    ).first()
 
     if not rule:
         raise HTTPException(status_code=404, detail="Regel nicht gefunden")
@@ -153,7 +161,10 @@ def update_rule(
 @router.delete("/{rule_id}")
 def delete_rule(rule_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Delete rule"""
-    rule = db.query(CategorizationRule).filter(CategorizationRule.id == rule_id).first()
+    rule = db.query(CategorizationRule).filter(
+        CategorizationRule.id == rule_id,
+        CategorizationRule.user_id == current_user.id,
+    ).first()
 
     if not rule:
         raise HTTPException(status_code=404, detail="Regel nicht gefunden")
@@ -184,13 +195,22 @@ def create_rule_from_tx(
     current_user: User = Depends(get_current_user),
 ):
     """Create rule based on a transaction"""
-    transaction = db.query(Transaction).filter(Transaction.id == transaction_id).first()
+    from ..models import Account
+    user_account_ids = [a.id for a in db.query(Account.id).filter(Account.user_id == current_user.id).all()]
+
+    transaction = db.query(Transaction).filter(
+        Transaction.id == transaction_id,
+        Transaction.account_id.in_(user_account_ids) if user_account_ids else Transaction.id == -1,
+    ).first()
 
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaktion nicht gefunden")
 
-    # Verify category exists
-    category = db.query(Category).filter(Category.id == category_id).first()
+    # Verify category exists and belongs to user
+    category = db.query(Category).filter(
+        Category.id == category_id,
+        Category.user_id == current_user.id,
+    ).first()
     if not category:
         raise HTTPException(status_code=400, detail="Kategorie nicht gefunden")
 

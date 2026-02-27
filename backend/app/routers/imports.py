@@ -109,7 +109,9 @@ def get_imports(
     current_user: User = Depends(get_current_user),
 ):
     """Get import history"""
-    imports = db.query(Import).order_by(
+    imports = db.query(Import).filter(
+        Import.user_id == current_user.id
+    ).order_by(
         Import.import_date.desc()
     ).limit(limit).all()
 
@@ -119,7 +121,10 @@ def get_imports(
 @router.get("/{import_id}", response_model=schemas.ImportResult)
 def get_import(import_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Get single import record"""
-    import_record = db.query(Import).filter(Import.id == import_id).first()
+    import_record = db.query(Import).filter(
+        Import.id == import_id,
+        Import.user_id == current_user.id,
+    ).first()
 
     if not import_record:
         raise HTTPException(status_code=404, detail="Import nicht gefunden")

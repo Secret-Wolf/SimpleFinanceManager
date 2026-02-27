@@ -346,7 +346,8 @@ def import_csv(db: Session, content: str, filename: str = None, bank_format: str
         transactions_new=new_count,
         transactions_duplicate=duplicate_count,
         transactions_error=error_count,
-        status=status
+        status=status,
+        user_id=user_id,
     )
     db.add(import_record)
     db.commit()

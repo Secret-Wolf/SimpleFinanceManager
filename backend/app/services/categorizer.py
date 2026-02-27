@@ -3,6 +3,11 @@ from sqlalchemy import and_, or_
 from typing import List, Optional
 from decimal import Decimal
 import re
+import concurrent.futures
+
+_regex_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="regex")
+_REGEX_TIMEOUT = 2.0
+_REGEX_INPUT_LIMIT = 2000
 
 from ..models import Transaction, CategorizationRule, Category
 
@@ -32,10 +37,16 @@ def match_pattern(text: str, pattern: str) -> bool:
             flags |= re.IGNORECASE
 
         try:
-            return bool(re.search(regex_pattern, text, flags))
+            compiled = re.compile(regex_pattern, flags)
         except re.error:
-            # Invalid regex, fall back to contains
             return pattern.lower() in text.lower()
+
+        limited_text = text[:_REGEX_INPUT_LIMIT]
+        future = _regex_executor.submit(compiled.search, limited_text)
+        try:
+            return bool(future.result(timeout=_REGEX_TIMEOUT))
+        except concurrent.futures.TimeoutError:
+            return False
 
     # Wildcard pattern (* or %)
     if "*" in pattern or "%" in pattern:

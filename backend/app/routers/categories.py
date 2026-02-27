@@ -99,7 +99,10 @@ def get_categories(
 @router.get("/{category_id}", response_model=schemas.Category)
 def get_category(category_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Get single category"""
-    category = db.query(Category).filter(Category.id == category_id).first()
+    category = db.query(Category).filter(
+        Category.id == category_id,
+        Category.user_id == current_user.id,
+    ).first()
 
     if not category:
         raise HTTPException(status_code=404, detail="Kategorie nicht gefunden")
@@ -175,7 +178,10 @@ def update_category(
     current_user: User = Depends(get_current_user),
 ):
     """Update category"""
-    category = db.query(Category).filter(Category.id == category_id).first()
+    category = db.query(Category).filter(
+        Category.id == category_id,
+        Category.user_id == current_user.id,
+    ).first()
 
     if not category:
         raise HTTPException(status_code=404, detail="Kategorie nicht gefunden")
@@ -251,7 +257,10 @@ def delete_category(
     current_user: User = Depends(get_current_user),
 ):
     """Delete category, optionally moving transactions to another category"""
-    category = db.query(Category).filter(Category.id == category_id).first()
+    category = db.query(Category).filter(
+        Category.id == category_id,
+        Category.user_id == current_user.id,
+    ).first()
 
     if not category:
         raise HTTPException(status_code=404, detail="Kategorie nicht gefunden")

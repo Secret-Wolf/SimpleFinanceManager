@@ -95,7 +95,11 @@ if os.path.exists(frontend_path):
     @app.get("/{path:path}")
     async def serve_spa(path: str):
         # Serve static files or fallback to index.html for SPA routing
-        file_path = os.path.join(frontend_path, path)
+        # Use realpath to prevent path traversal via ../ or encoded sequences
+        real_frontend = os.path.realpath(frontend_path)
+        file_path = os.path.realpath(os.path.join(frontend_path, path))
+        if not file_path.startswith(real_frontend + os.sep) and file_path != real_frontend:
+            return FileResponse(os.path.join(frontend_path, "index.html"))
         if os.path.exists(file_path) and os.path.isfile(file_path):
             return FileResponse(file_path)
         return FileResponse(os.path.join(frontend_path, "index.html"))
