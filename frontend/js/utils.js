@@ -1,5 +1,14 @@
 // Utility Functions
 
+// Escape HTML to prevent XSS
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    const text = String(str);
+    const div = document.createElement('div');
+    div.appendChild(document.createTextNode(text));
+    return div.innerHTML;
+}
+
 // Format currency in German format
 function formatCurrency(amount, currency = 'EUR') {
     const num = parseFloat(amount) || 0;
@@ -102,7 +111,7 @@ function showToast(message, type = 'info') {
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     toast.innerHTML = `
-        <span>${message}</span>
+        <span>${escapeHtml(message)}</span>
         <button onclick="this.parentElement.remove()" style="background:none;border:none;cursor:pointer;margin-left:auto;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -170,7 +179,7 @@ function generateCategoryOptions(categories, selectedId = null, level = 0) {
     for (const cat of categories) {
         const prefix = level > 0 ? '&nbsp;&nbsp;'.repeat(level) + '↳ ' : '';
         const selected = cat.id === selectedId ? 'selected' : '';
-        html += `<option value="${cat.id}" ${selected}>${prefix}${cat.name}</option>`;
+        html += `<option value="${cat.id}" ${selected}>${prefix}${escapeHtml(cat.name)}</option>`;
 
         if (cat.children && cat.children.length > 0) {
             html += generateCategoryOptions(cat.children, selectedId, level + 1);

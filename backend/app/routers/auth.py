@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..config import settings as app_settings
 
+from ..audit import log_auth_event, log_security_event
 from ..auth import (
     clear_auth_cookies,
     get_current_admin,
@@ -62,6 +63,14 @@ def register(request: Request, data: schemas.UserRegister, response: Response, d
     # Auto-login after registration
     set_auth_cookies(response, user.id)
 
+    log_auth_event(
+        "register",
+        ip=request.client.host if request.client else "unknown",
+        user_id=user.id,
+        user_email=user.email,
+        detail="first_user/admin" if is_first_user else "user",
+    )
+
     # Assign existing data to first user (migration of legacy data)
     if is_first_user:
         _assign_legacy_data_to_user(db, user.id)
@@ -92,6 +101,14 @@ def register_user_by_admin(
     db.commit()
     db.refresh(user)
 
+    log_auth_event(
+        "register_by_admin",
+        ip="internal",
+        user_id=user.id,
+        user_email=user.email,
+        detail=f"created_by_admin_id={admin.id}",
+    )
+
     return user
 
 
@@ -101,19 +118,38 @@ def login(request: Request, data: schemas.UserLogin, response: Response, db: Ses
     """Login with email and password"""
     user = db.query(User).filter(User.email == data.email.strip().lower()).first()
 
+    client_ip = request.client.host if request.client else "unknown"
+
     if not user or not verify_password(data.password, user.hashed_password):
+        log_auth_event(
+            "login_failed",
+            ip=client_ip,
+            user_email=data.email,
+            status="failure",
+            detail="invalid_credentials",
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Ungültige E-Mail oder Passwort",
         )
 
     if not user.is_active:
+        log_auth_event(
+            "login_failed",
+            ip=client_ip,
+            user_id=user.id,
+            user_email=user.email,
+            status="failure",
+            detail="account_disabled",
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Konto deaktiviert",
         )
 
     set_auth_cookies(response, user.id)
+
+    log_auth_event("login", ip=client_ip, user_id=user.id, user_email=user.email)
 
     return {
         "message": "Erfolgreich eingeloggt",
@@ -122,9 +158,10 @@ def login(request: Request, data: schemas.UserLogin, response: Response, db: Ses
 
 
 @router.post("/logout")
-def logout(response: Response):
+def logout(request: Request, response: Response):
     """Logout - clear auth cookies"""
     clear_auth_cookies(response)
+    log_auth_event("logout", ip=request.client.host if request.client else "unknown")
     return {"message": "Erfolgreich ausgeloggt"}
 
 
@@ -184,16 +221,28 @@ def update_me(
 
 @router.post("/change-password")
 def change_password(
+    request: Request,
     data: schemas.PasswordChange,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     """Change password for current user"""
+    client_ip = request.client.host if request.client else "unknown"
+
     if not verify_password(data.current_password, user.hashed_password):
+        log_auth_event(
+            "password_change_failed",
+            ip=client_ip,
+            user_id=user.id,
+            status="failure",
+            detail="wrong_current_password",
+        )
         raise HTTPException(status_code=400, detail="Aktuelles Passwort ist falsch")
 
     user.hashed_password = get_password_hash(data.new_password)
     db.commit()
+
+    log_auth_event("password_changed", ip=client_ip, user_id=user.id)
 
     return {"message": "Passwort geändert"}
 

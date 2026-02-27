@@ -19,7 +19,7 @@ async function loadProfilesDropdown() {
         dropdown.innerHTML = `
             <option value="">Alle Profile</option>
             ${profiles.map(p => `
-                <option value="${p.id}" style="color: ${p.color}">${p.name}${p.is_admin ? ' (Admin)' : ''}</option>
+                <option value="${p.id}" style="color: ${p.color}">${escapeHtml(p.name)}${p.is_admin ? ' (Admin)' : ''}</option>
             `).join('')}
             <option value="shared">Gemeinsamer Haushalt</option>
         `;
@@ -178,7 +178,7 @@ async function loadProfileManagement() {
             </div>
         `;
     } catch (error) {
-        container.innerHTML = `<div class="empty-state"><p>Fehler: ${error.message}</p></div>`;
+        container.innerHTML = `<div class="empty-state"><p>Fehler: ${escapeHtml(error.message)}</p></div>`;
     }
 }
 

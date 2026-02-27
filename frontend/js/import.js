@@ -93,7 +93,7 @@ async function handleFileUpload(file) {
                 <line x1="9" y1="9" x2="15" y2="15"></line>
             </svg>
             <h4>Import fehlgeschlagen</h4>
-            <p>${error.message}</p>
+            <p>${escapeHtml(error.message)}</p>
             <button class="btn btn-secondary mt-4" onclick="resetDropzone()">Erneut versuchen</button>
         `;
     }
@@ -148,7 +148,7 @@ async function loadImportHistory() {
                     ${imports.map(imp => `
                         <tr>
                             <td>${formatDate(imp.import_date)}</td>
-                            <td>${imp.filename || '-'}</td>
+                            <td>${escapeHtml(imp.filename || '-')}</td>
                             <td>${imp.transactions_new}</td>
                             <td>${imp.transactions_duplicate}</td>
                             <td>
@@ -163,7 +163,7 @@ async function loadImportHistory() {
         `;
 
     } catch (error) {
-        container.innerHTML = `<p style="color: var(--danger-color)">Fehler: ${error.message}</p>`;
+        container.innerHTML = `<p style="color: var(--danger-color)">Fehler: ${escapeHtml(error.message)}</p>`;
     }
 }
 
@@ -192,7 +192,7 @@ function populateImportProfileDropdown() {
     dropdown.innerHTML = `
         <option value="">Kein Profil</option>
         ${profiles.map(p => `
-            <option value="${p.id}" ${selectedProfileId === p.id ? 'selected' : ''}>${p.name}${p.is_admin ? ' (Admin)' : ''}</option>
+            <option value="${p.id}" ${selectedProfileId === p.id ? 'selected' : ''}>${escapeHtml(p.name)}${p.is_admin ? ' (Admin)' : ''}</option>
         `).join('')}
     `;
 }

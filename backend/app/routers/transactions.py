@@ -7,6 +7,7 @@ from decimal import Decimal
 import hashlib
 import uuid
 
+from ..audit import log_data_event
 from ..database import get_db
 from ..auth import get_current_user
 from ..models import Transaction, Category, Account, User
@@ -298,6 +299,13 @@ def delete_transaction(transaction_id: int, db: Session = Depends(get_db), curre
     db.delete(transaction)
     db.commit()
 
+    log_data_event(
+        "delete",
+        user_id=current_user.id,
+        resource="transaction",
+        resource_id=transaction_id,
+    )
+
     return {"message": "Transaktion gelöscht"}
 
 
@@ -402,5 +410,13 @@ def create_manual_transaction(
     db.add(transaction)
     db.commit()
     db.refresh(transaction)
+
+    log_data_event(
+        "create",
+        user_id=current_user.id,
+        resource="manual_transaction",
+        resource_id=transaction.id,
+        detail=f"amount={data.amount} description={data.description}",
+    )
 
     return transaction

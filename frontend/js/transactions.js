@@ -73,9 +73,9 @@ async function loadTransactions() {
                 <td>
                     <div>
                         ${tx.is_shared ? '<span class="shared-badge" title="Gemeinsame Ausgabe">G</span>' : ''}
-                        ${truncate(tx.counterpart_name || tx.booking_type || '-', 35)}
+                        ${escapeHtml(truncate(tx.counterpart_name || tx.booking_type || '-', 35))}
                     </div>
-                    <div style="font-size: 0.75rem; color: var(--text-muted)">${truncate(tx.purpose || '', 50)}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted)">${escapeHtml(truncate(tx.purpose || '', 50))}</div>
                 </td>
                 <td>
                     <select class="form-control category-select" data-id="${tx.id}" style="min-width: 150px;">
@@ -131,7 +131,7 @@ async function loadTransactions() {
         renderPagination(paginationContainer, result);
 
     } catch (error) {
-        container.innerHTML = `<tr><td colspan="6" class="text-center">Fehler: ${error.message}</td></tr>`;
+        container.innerHTML = `<tr><td colspan="6" class="text-center">Fehler: ${escapeHtml(error.message)}</td></tr>`;
     }
 }
 

@@ -24,7 +24,7 @@ async function loadCategories() {
         container.innerHTML = renderCategoryTree(categories);
 
     } catch (error) {
-        container.innerHTML = `<div class="empty-state"><p>Fehler: ${error.message}</p></div>`;
+        container.innerHTML = `<div class="empty-state"><p>Fehler: ${escapeHtml(error.message)}</p></div>`;
     }
 }
 
@@ -37,7 +37,7 @@ function renderCategoryTree(cats, level = 0) {
         html += `
             <div class="category-item ${level > 0 ? 'subcategory' : ''}" style="padding-left: ${16 + paddingLeft}px;" data-id="${cat.id}">
                 <div class="color-dot" style="background-color: ${cat.color || '#888'}"></div>
-                <span class="name">${cat.name}</span>
+                <span class="name">${escapeHtml(cat.name)}</span>
                 <span class="count">${cat.transaction_count || 0}</span>
                 <div class="actions">
                     <button class="btn btn-sm btn-icon" onclick="editCategory(${cat.id})" title="Bearbeiten">
@@ -54,7 +54,7 @@ function renderCategoryTree(cats, level = 0) {
                             </svg>
                         </button>
                     ` : ''}
-                    <button class="btn btn-sm btn-icon" onclick="deleteCategory(${cat.id}, '${cat.name}')" title="Löschen">
+                    <button class="btn btn-sm btn-icon" onclick="deleteCategory(${cat.id})" title="Löschen">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="3 6 5 6 21 6"></polyline>
                             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -81,7 +81,7 @@ function showAddCategoryModal() {
     // Update parent select
     document.getElementById('category-parent').innerHTML = `
         <option value="">Keine (Hauptkategorie)</option>
-        ${categories.filter(c => !c.parent_id).map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+        ${categories.filter(c => !c.parent_id).map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}
     `;
 
     openModal('category-modal');
@@ -100,7 +100,7 @@ function addSubcategory(parentId) {
     document.getElementById('category-parent').innerHTML = `
         <option value="">Keine (Hauptkategorie)</option>
         ${categories.filter(c => !c.parent_id).map(c =>
-            `<option value="${c.id}" ${c.id === parentId ? 'selected' : ''}>${c.name}</option>`
+            `<option value="${c.id}" ${c.id === parentId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`
         ).join('')}
     `;
 
@@ -121,7 +121,7 @@ async function editCategory(id) {
     document.getElementById('category-parent').innerHTML = `
         <option value="">Keine (Hauptkategorie)</option>
         ${categories.filter(c => !c.parent_id && c.id !== id).map(c =>
-            `<option value="${c.id}" ${c.id === cat.parent_id ? 'selected' : ''}>${c.name}</option>`
+            `<option value="${c.id}" ${c.id === cat.parent_id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`
         ).join('')}
     `;
 
@@ -165,9 +165,10 @@ async function saveCategory() {
     }
 }
 
-async function deleteCategory(id, name) {
+async function deleteCategory(id) {
     const cat = flatCategories.find(c => c.id === id);
     if (!cat) return;
+    const name = cat.name;
 
     // Check if has transactions
     if (cat.transaction_count > 0) {
@@ -180,7 +181,7 @@ async function deleteCategory(id, name) {
         document.getElementById('delete-move-to').innerHTML = `
             <option value="">Keine (unkategorisiert)</option>
             ${flatCategories.filter(c => c.id !== id).map(c =>
-                `<option value="${c.id}">${c.full_path || c.name}</option>`
+                `<option value="${c.id}">${escapeHtml(c.full_path || c.name)}</option>`
             ).join('')}
         `;
 

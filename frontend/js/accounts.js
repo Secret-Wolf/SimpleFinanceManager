@@ -33,12 +33,12 @@ async function loadAccounts() {
                 <div class="account-header">
                     <div class="account-bank">
                         <span class="bank-icon">${getBankIcon(account.bank_name)}</span>
-                        <span class="bank-name">${account.bank_name || 'Unbekannte Bank'}</span>
+                        <span class="bank-name">${escapeHtml(account.bank_name || 'Unbekannte Bank')}</span>
                     </div>
-                    <span class="account-type-badge">${getAccountTypeName(account.account_type)}</span>
+                    <span class="account-type-badge">${escapeHtml(getAccountTypeName(account.account_type))}</span>
                 </div>
-                <div class="account-name">${account.name}</div>
-                <div class="account-iban">${formatIban(account.iban)}</div>
+                <div class="account-name">${escapeHtml(account.name)}</div>
+                <div class="account-iban">${escapeHtml(formatIban(account.iban))}</div>
                 <div class="account-balance ${account.balance >= 0 ? 'positive' : 'negative'}">
                     ${account.balance !== null ? formatCurrency(account.balance) : 'Kein Saldo'}
                 </div>
@@ -60,7 +60,7 @@ async function loadAccounts() {
         `).join('');
 
     } catch (error) {
-        container.innerHTML = `<div class="card" style="grid-column: 1 / -1;"><p style="color: var(--danger-color)">Fehler: ${error.message}</p></div>`;
+        container.innerHTML = `<div class="card" style="grid-column: 1 / -1;"><p style="color: var(--danger-color)">Fehler: ${escapeHtml(error.message)}</p></div>`;
     }
 }
 

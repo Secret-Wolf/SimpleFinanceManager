@@ -4,6 +4,7 @@ from sqlalchemy import func, case
 from typing import List, Optional
 from decimal import Decimal
 
+from ..audit import log_data_event
 from ..database import get_db
 from ..auth import get_current_user
 from ..models import Account, Transaction, User
@@ -172,5 +173,13 @@ def update_account(
 
     db.commit()
     db.refresh(account)
+
+    log_data_event(
+        "update",
+        user_id=current_user.id,
+        resource="account",
+        resource_id=account_id,
+        detail=f"name={account.name} active={account.is_active}",
+    )
 
     return {"status": "success", "account": account}

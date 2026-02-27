@@ -38,7 +38,7 @@ async function loadRules() {
                         ${rules.map(rule => `
                             <tr data-id="${rule.id}">
                                 <td>${rule.priority}</td>
-                                <td>${rule.name || '-'}</td>
+                                <td>${escapeHtml(rule.name || '-')}</td>
                                 <td>
                                     ${getRuleCriteriaText(rule)}
                                 </td>
@@ -46,7 +46,7 @@ async function loadRules() {
                                     ${rule.category ? `
                                         <span class="category-badge">
                                             <span class="dot" style="background-color: ${rule.category.color || '#888'}"></span>
-                                            ${rule.category.name}
+                                            ${escapeHtml(rule.category.name)}
                                         </span>
                                     ` : '-'}
                                 </td>
@@ -88,7 +88,7 @@ async function loadRules() {
         `;
 
     } catch (error) {
-        container.innerHTML = `<div class="empty-state"><p>Fehler: ${error.message}</p></div>`;
+        container.innerHTML = `<div class="empty-state"><p>Fehler: ${escapeHtml(error.message)}</p></div>`;
     }
 }
 
@@ -96,16 +96,16 @@ function getRuleCriteriaText(rule) {
     const criteria = [];
 
     if (rule.match_counterpart_name) {
-        criteria.push(`Empfänger: "${rule.match_counterpart_name}"`);
+        criteria.push(`Empfänger: "${escapeHtml(rule.match_counterpart_name)}"`);
     }
     if (rule.match_counterpart_iban) {
-        criteria.push(`IBAN: ${rule.match_counterpart_iban}`);
+        criteria.push(`IBAN: ${escapeHtml(rule.match_counterpart_iban)}`);
     }
     if (rule.match_purpose) {
-        criteria.push(`Verwendungszweck: "${rule.match_purpose}"`);
+        criteria.push(`Verwendungszweck: "${escapeHtml(rule.match_purpose)}"`);
     }
     if (rule.match_booking_type) {
-        criteria.push(`Buchungsart: ${rule.match_booking_type}`);
+        criteria.push(`Buchungsart: ${escapeHtml(rule.match_booking_type)}`);
     }
     if (rule.match_amount_min !== null || rule.match_amount_max !== null) {
         const min = rule.match_amount_min !== null ? formatCurrency(rule.match_amount_min) : '-';

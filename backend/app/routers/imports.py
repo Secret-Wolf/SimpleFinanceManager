@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
+from ..audit import log_data_event
 from ..database import get_db
 from ..auth import get_current_user
 from ..models import Import, User
@@ -86,6 +87,13 @@ async def upload_csv(
             status_code=500,
             detail="Import fehlgeschlagen"
         )
+
+    log_data_event(
+        "csv_import",
+        user_id=current_user.id,
+        resource="import",
+        detail=f"file={file.filename} format={bank_format} new={import_result.transactions_new} duplicates={import_result.transactions_duplicate}",
+    )
 
     # Auto-categorize new transactions
     if auto_categorize and import_result.transactions_new > 0:

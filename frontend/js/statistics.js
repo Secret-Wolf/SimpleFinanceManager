@@ -135,7 +135,7 @@ async function loadCategoryStats() {
         document.getElementById('stats-balance').className = `value ${stats.total_income >= stats.total_expenses ? 'positive' : 'negative'}`;
 
     } catch (error) {
-        container.innerHTML = `<p style="color: var(--danger-color)">Fehler: ${error.message}</p>`;
+        container.innerHTML = `<p style="color: var(--danger-color)">Fehler: ${escapeHtml(error.message)}</p>`;
     }
 }
 
@@ -164,7 +164,7 @@ async function loadTimeStats() {
         const stats = await api.getStatsOverTime(params);
         renderTimeChart(stats.data);
     } catch (error) {
-        container.innerHTML = `<p style="color: var(--danger-color)">Fehler: ${error.message}</p>`;
+        container.innerHTML = `<p style="color: var(--danger-color)">Fehler: ${escapeHtml(error.message)}</p>`;
     }
 }
 
@@ -452,6 +452,6 @@ async function loadSharedSummary() {
         `;
 
     } catch (error) {
-        container.innerHTML = `<p style="color: var(--danger-color)">Fehler: ${error.message}</p>`;
+        container.innerHTML = `<p style="color: var(--danger-color)">Fehler: ${escapeHtml(error.message)}</p>`;
     }
 }

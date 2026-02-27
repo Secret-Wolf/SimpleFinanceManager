@@ -251,7 +251,7 @@ async function loadDashboard() {
         updateNavBadge(summary.uncategorized_count);
 
     } catch (error) {
-        container.innerHTML = `<div class="empty-state"><p>Fehler beim Laden: ${error.message}</p></div>`;
+        container.innerHTML = `<div class="empty-state"><p>Fehler beim Laden: ${escapeHtml(error.message)}</p></div>`;
     }
 }
 
@@ -286,7 +286,7 @@ async function loadAccountsDropdown() {
             dropdown.innerHTML = `
                 <option value="">Alle Konten</option>
                 ${accounts.map(acc => `
-                    <option value="${acc.id}">${acc.name}${acc.bank_name ? ' (' + acc.bank_name + ')' : ''}</option>
+                    <option value="${acc.id}">${escapeHtml(acc.name)}${acc.bank_name ? ' (' + escapeHtml(acc.bank_name) + ')' : ''}</option>
                 `).join('')}
             `;
 
