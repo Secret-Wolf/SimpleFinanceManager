@@ -3,9 +3,11 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 
 from ..database import get_db
-from ..models import Import
+from ..auth import get_current_user
+from ..models import Import, User
 from ..services.csv_parser import import_csv, SUPPORTED_FORMATS
 from ..services.categorizer import apply_rules_to_uncategorized
+from ..config import settings
 from .. import schemas
 
 router = APIRouter(prefix="/api/import", tags=["import"])
@@ -29,7 +31,8 @@ async def upload_csv(
     bank_format: str = Query(default="auto", description="Bank format: auto, volksbank, ing"),
     auto_categorize: bool = True,
     profile_id: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Upload and import CSV file"""
     # Validate bank format
@@ -46,9 +49,15 @@ async def upload_csv(
             detail="Nur CSV-Dateien werden unterstützt"
         )
 
-    # Read file content
+    # Read file content with size limit
     try:
         content = await file.read()
+        max_size = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+        if len(content) > max_size:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Datei zu groß. Maximum: {settings.MAX_UPLOAD_SIZE_MB} MB"
+            )
 
         # Try different encodings
         for encoding in ["utf-8-sig", "utf-8", "latin-1", "cp1252"]:
@@ -66,16 +75,16 @@ async def upload_csv(
     except Exception as e:
         raise HTTPException(
             status_code=400,
-            detail=f"Fehler beim Lesen der Datei: {str(e)}"
+            detail="Fehler beim Lesen der Datei"
         )
 
     # Import CSV
     try:
-        import_result = import_csv(db, content_str, file.filename, bank_format, profile_id=profile_id)
+        import_result = import_csv(db, content_str, file.filename, bank_format, profile_id=profile_id, user_id=current_user.id)
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Import fehlgeschlagen: {str(e)}"
+            detail="Import fehlgeschlagen"
         )
 
     # Auto-categorize new transactions
@@ -88,7 +97,8 @@ async def upload_csv(
 @router.get("", response_model=List[schemas.ImportResult])
 def get_imports(
     limit: int = 20,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Get import history"""
     imports = db.query(Import).order_by(
@@ -99,7 +109,7 @@ def get_imports(
 
 
 @router.get("/{import_id}", response_model=schemas.ImportResult)
-def get_import(import_id: int, db: Session = Depends(get_db)):
+def get_import(import_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Get single import record"""
     import_record = db.query(Import).filter(Import.id == import_id).first()
 

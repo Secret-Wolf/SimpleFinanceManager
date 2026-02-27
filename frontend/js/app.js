@@ -345,5 +345,4 @@ function getSelectedAccountId() {
     return selectedAccountId;
 }
 
-// Start app when DOM is ready
-document.addEventListener('DOMContentLoaded', init);
+// Note: init() is called by auth.js after successful authentication

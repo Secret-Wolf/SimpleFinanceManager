@@ -3,21 +3,22 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from ..database import get_db
-from ..models import Profile, Account
+from ..auth import get_current_user
+from ..models import Profile, Account, User
 from .. import schemas
 
 router = APIRouter(prefix="/api/profiles", tags=["profiles"])
 
 
 @router.get("", response_model=List[schemas.ProfileResponse])
-def get_profiles(db: Session = Depends(get_db)):
+def get_profiles(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Get all profiles"""
     profiles = db.query(Profile).order_by(Profile.is_admin.desc(), Profile.name).all()
     return profiles
 
 
 @router.get("/{profile_id}", response_model=schemas.ProfileResponse)
-def get_profile(profile_id: int, db: Session = Depends(get_db)):
+def get_profile(profile_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Get single profile"""
     profile = db.query(Profile).filter(Profile.id == profile_id).first()
     if not profile:
@@ -26,7 +27,7 @@ def get_profile(profile_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=schemas.ProfileResponse)
-def create_profile(data: schemas.ProfileCreate, db: Session = Depends(get_db)):
+def create_profile(data: schemas.ProfileCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Create a new profile"""
     existing = db.query(Profile).filter(Profile.name == data.name).first()
     if existing:
@@ -47,7 +48,8 @@ def create_profile(data: schemas.ProfileCreate, db: Session = Depends(get_db)):
 def update_profile(
     profile_id: int,
     data: schemas.ProfileUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Update a profile"""
     profile = db.query(Profile).filter(Profile.id == profile_id).first()
@@ -71,7 +73,7 @@ def update_profile(
 
 
 @router.delete("/{profile_id}")
-def delete_profile(profile_id: int, db: Session = Depends(get_db)):
+def delete_profile(profile_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Delete a profile (cannot delete admin profile)"""
     profile = db.query(Profile).filter(Profile.id == profile_id).first()
     if not profile:

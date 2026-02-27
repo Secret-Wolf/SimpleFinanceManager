@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session, joinedload
 from typing import List
 
 from ..database import get_db
-from ..models import CategorizationRule, Category, Transaction
+from ..auth import get_current_user
+from ..models import CategorizationRule, Category, Transaction, User
 from ..services.categorizer import apply_rules_to_uncategorized, create_rule_from_transaction
 from .. import schemas
 
@@ -11,7 +12,7 @@ router = APIRouter(prefix="/api/rules", tags=["rules"])
 
 
 @router.get("", response_model=List[schemas.Rule])
-def get_rules(db: Session = Depends(get_db)):
+def get_rules(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Get all categorization rules"""
     rules = db.query(CategorizationRule).options(
         joinedload(CategorizationRule.category)
@@ -21,7 +22,7 @@ def get_rules(db: Session = Depends(get_db)):
 
 
 @router.get("/{rule_id}", response_model=schemas.Rule)
-def get_rule(rule_id: int, db: Session = Depends(get_db)):
+def get_rule(rule_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Get single rule"""
     rule = db.query(CategorizationRule).options(
         joinedload(CategorizationRule.category)
@@ -36,7 +37,8 @@ def get_rule(rule_id: int, db: Session = Depends(get_db)):
 @router.post("", response_model=schemas.Rule)
 def create_rule(
     rule_data: schemas.RuleCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Create new categorization rule"""
 
@@ -64,6 +66,7 @@ def create_rule(
     rule = CategorizationRule(
         name=rule_data.name,
         priority=rule_data.priority,
+        user_id=current_user.id,
         match_counterpart_name=rule_data.match_counterpart_name,
         match_counterpart_iban=rule_data.match_counterpart_iban,
         match_purpose=rule_data.match_purpose,
@@ -91,7 +94,8 @@ def create_rule(
 def update_rule(
     rule_id: int,
     update: schemas.RuleUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Update rule"""
     rule = db.query(CategorizationRule).filter(CategorizationRule.id == rule_id).first()
@@ -147,7 +151,7 @@ def update_rule(
 
 
 @router.delete("/{rule_id}")
-def delete_rule(rule_id: int, db: Session = Depends(get_db)):
+def delete_rule(rule_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Delete rule"""
     rule = db.query(CategorizationRule).filter(CategorizationRule.id == rule_id).first()
 
@@ -161,7 +165,7 @@ def delete_rule(rule_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/apply")
-def apply_rules(db: Session = Depends(get_db)):
+def apply_rules(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Apply all rules to uncategorized transactions"""
     count = apply_rules_to_uncategorized(db)
 
@@ -176,7 +180,8 @@ def create_rule_from_tx(
     transaction_id: int,
     category_id: int,
     match_type: str = "counterpart_name",
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Create rule based on a transaction"""
     transaction = db.query(Transaction).filter(Transaction.id == transaction_id).first()

@@ -135,4 +135,37 @@ def run_migrations():
                 conn.commit()
                 logger.info("Migration: assign_shared added to categorization_rules")
 
+        # Migration 8: Add users table
+        if 'users' not in existing_tables:
+            logger.info("Migration: Creating users table")
+            conn.execute(text("""
+                CREATE TABLE users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    email VARCHAR(255) UNIQUE NOT NULL,
+                    hashed_password VARCHAR(255) NOT NULL,
+                    display_name VARCHAR(100) NOT NULL,
+                    is_active BOOLEAN DEFAULT 1,
+                    is_admin BOOLEAN DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email ON users(email)"))
+            conn.commit()
+            logger.info("Migration: users table created")
+            # Refresh inspector
+            inspector = inspect(engine)
+
+        # Migration 9: Add user_id to accounts, categories, categorization_rules
+        for table_name in ['accounts', 'categories', 'categorization_rules']:
+            if table_name in inspector.get_table_names():
+                columns = [col['name'] for col in inspector.get_columns(table_name)]
+                if 'user_id' not in columns:
+                    logger.info(f"Migration: Adding user_id to {table_name}")
+                    conn.execute(text(
+                        f"ALTER TABLE {table_name} ADD COLUMN user_id INTEGER REFERENCES users(id)"
+                    ))
+                    conn.commit()
+                    logger.info(f"Migration: user_id added to {table_name}")
+
         logger.info("All migrations completed")

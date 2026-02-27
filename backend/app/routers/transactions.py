@@ -8,7 +8,8 @@ import hashlib
 import uuid
 
 from ..database import get_db
-from ..models import Transaction, Category, Account
+from ..auth import get_current_user
+from ..models import Transaction, Category, Account, User
 from .. import schemas
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
@@ -31,13 +32,20 @@ def get_transactions(
     amount_type: Optional[str] = Query(None, regex="^(income|expenses|all)$"),
     search: Optional[str] = None,
     uncategorized_only: bool = False,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Get paginated list of transactions with filters"""
 
+    # User isolation: only show transactions from user's accounts
+    user_account_ids = [a.id for a in db.query(Account.id).filter(Account.user_id == current_user.id).all()]
+
     query = db.query(Transaction).options(
         joinedload(Transaction.category)
-    ).filter(Transaction.is_split_parent == False)
+    ).filter(
+        Transaction.is_split_parent == False,
+        Transaction.account_id.in_(user_account_ids) if user_account_ids else Transaction.id == -1,
+    )
 
     # Apply filters
     if start_date:
@@ -124,7 +132,7 @@ def get_transactions(
 
 
 @router.get("/{transaction_id}", response_model=schemas.Transaction)
-def get_transaction(transaction_id: int, db: Session = Depends(get_db)):
+def get_transaction(transaction_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Get single transaction by ID"""
     transaction = db.query(Transaction).options(
         joinedload(Transaction.category),
@@ -141,7 +149,8 @@ def get_transaction(transaction_id: int, db: Session = Depends(get_db)):
 def update_transaction(
     transaction_id: int,
     update: schemas.TransactionUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Update transaction (category, notes, tags)"""
     transaction = db.query(Transaction).filter(Transaction.id == transaction_id).first()
@@ -178,7 +187,8 @@ def update_transaction(
 def split_transaction(
     transaction_id: int,
     split_data: schemas.SplitTransactionCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Split a transaction into multiple parts"""
     transaction = db.query(Transaction).filter(Transaction.id == transaction_id).first()
@@ -257,7 +267,7 @@ def split_transaction(
 
 
 @router.delete("/{transaction_id}")
-def delete_transaction(transaction_id: int, db: Session = Depends(get_db)):
+def delete_transaction(transaction_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Delete a transaction"""
     transaction = db.query(Transaction).filter(Transaction.id == transaction_id).first()
 
@@ -295,7 +305,8 @@ def delete_transaction(transaction_id: int, db: Session = Depends(get_db)):
 def bulk_categorize(
     transaction_ids: List[int],
     category_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Assign category to multiple transactions"""
     # Verify category exists
@@ -319,7 +330,8 @@ def bulk_categorize(
 @router.post("/bulk-shared")
 def bulk_set_shared(
     data: schemas.BulkSharedRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Set shared flag on multiple transactions"""
     updated = db.query(Transaction).filter(
@@ -338,20 +350,24 @@ def bulk_set_shared(
 @router.post("/manual", response_model=schemas.Transaction)
 def create_manual_transaction(
     data: schemas.ManualTransactionCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Erstellt eine manuelle Transaktion (Bargeld, Geschenke, etc.)"""
 
-    # Bargeld-Account erstellen oder finden
-    cash_iban = "CASH0000000000000000"
-    cash_account = db.query(Account).filter(Account.iban == cash_iban).first()
+    # Bargeld-Account erstellen oder finden (per User)
+    cash_iban = f"CASH{current_user.id:016d}"
+    cash_account = db.query(Account).filter(
+        Account.iban == cash_iban, Account.user_id == current_user.id
+    ).first()
 
     if not cash_account:
         cash_account = Account(
             name="Bargeld",
             iban=cash_iban,
             bank_name="Manuell",
-            account_type="cash"
+            account_type="cash",
+            user_id=current_user.id,
         )
         db.add(cash_account)
         db.flush()

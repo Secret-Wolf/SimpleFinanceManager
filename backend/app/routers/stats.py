@@ -7,7 +7,8 @@ from calendar import monthrange
 from dateutil.relativedelta import relativedelta
 
 from ..database import get_db
-from ..models import Transaction, Category, Account
+from ..auth import get_current_user
+from ..models import Transaction, Category, Account, User
 from ..services.statistics import (
     get_dashboard_summary,
     get_stats_by_category,
@@ -66,7 +67,8 @@ def find_last_salary_date(db: Session) -> Optional[date]:
 def get_summary(
     account_id: Optional[int] = None,
     profile_id: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Get dashboard summary data"""
     return get_dashboard_summary(db, account_id=account_id, profile_id=profile_id)
@@ -80,7 +82,8 @@ def get_by_category(
     account_id: Optional[int] = None,
     profile_id: Optional[int] = None,
     shared_only: bool = False,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Get statistics grouped by category"""
 
@@ -133,7 +136,8 @@ def get_over_time(
     account_id: Optional[int] = None,
     profile_id: Optional[int] = None,
     shared_only: bool = False,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Get income/expenses over time"""
 
@@ -196,7 +200,8 @@ def get_shared_stats(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     period: str = Query("month", regex="^(week|month|last_month|quarter|year|since_salary|custom)$"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Get shared expenses summary across all profiles"""
     today = date.today()
@@ -237,7 +242,7 @@ def get_shared_stats(
 
 
 @router.get("/last-salary-date")
-def get_last_salary_date(db: Session = Depends(get_db)):
+def get_last_salary_date(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Get the date of the last salary payment"""
     salary_date = find_last_salary_date(db)
     return {"date": salary_date.isoformat() if salary_date else None}

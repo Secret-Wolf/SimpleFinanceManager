@@ -200,7 +200,7 @@ def parse_volksbank_csv(content: str) -> List[Dict]:
     return rows
 
 
-def ensure_account_exists(db: Session, iban: str, name: str = None, bic: str = None, bank_name: str = None, profile_id: int = None) -> Optional[Account]:
+def ensure_account_exists(db: Session, iban: str, name: str = None, bic: str = None, bank_name: str = None, profile_id: int = None, user_id: int = None) -> Optional[Account]:
     """Create account if it doesn't exist, return account or None"""
     if not iban:
         return None
@@ -213,19 +213,22 @@ def ensure_account_exists(db: Session, iban: str, name: str = None, bic: str = N
             bic=bic,
             bank_name=bank_name,
             account_type="giro",
-            profile_id=profile_id
+            profile_id=profile_id,
+            user_id=user_id,
         )
         db.add(account)
         db.flush()
-    elif profile_id and not account.profile_id:
-        # Assign profile to existing account if it doesn't have one yet
-        account.profile_id = profile_id
+    else:
+        if profile_id and not account.profile_id:
+            account.profile_id = profile_id
+        if user_id and not account.user_id:
+            account.user_id = user_id
         db.flush()
 
     return account
 
 
-def import_csv(db: Session, content: str, filename: str = None, bank_format: str = "auto", profile_id: int = None) -> Import:
+def import_csv(db: Session, content: str, filename: str = None, bank_format: str = "auto", profile_id: int = None, user_id: int = None) -> Import:
     """Import CSV content and return import result
 
     Args:
@@ -234,6 +237,7 @@ def import_csv(db: Session, content: str, filename: str = None, bank_format: str
         filename: Original filename
         bank_format: Bank format - "auto", "volksbank", or "ing"
         profile_id: Profile ID to assign new accounts to
+        user_id: User ID to assign new accounts to
     """
     # Determine format
     if bank_format == "auto":
@@ -266,7 +270,8 @@ def import_csv(db: Session, content: str, filename: str = None, bank_format: str
             first_row.get("account_name"),
             first_row.get("account_bic"),
             first_row.get("bank_name"),
-            profile_id=profile_id
+            profile_id=profile_id,
+            user_id=user_id,
         )
         db.commit()  # Commit account creation
 

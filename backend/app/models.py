@@ -4,6 +4,24 @@ from sqlalchemy.sql import func
 from .database import Base
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    email = Column(String, unique=True, nullable=False, index=True)
+    hashed_password = Column(String, nullable=False)
+    display_name = Column(String, nullable=False)
+    is_active = Column(Boolean, default=True)
+    is_admin = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    # Relationships
+    accounts = relationship("Account", back_populates="owner")
+    categories = relationship("Category", back_populates="owner")
+    rules = relationship("CategorizationRule", back_populates="owner")
+
+
 class Profile(Base):
     __tablename__ = "profiles"
 
@@ -27,10 +45,12 @@ class Account(Base):
     account_type = Column(String)  # "giro", "savings", "credit"
     is_active = Column(Boolean, default=True)
     profile_id = Column(Integer, ForeignKey("profiles.id"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=func.now())
 
     transactions = relationship("Transaction", back_populates="account")
     profile = relationship("Profile", back_populates="accounts")
+    owner = relationship("User", back_populates="accounts")
 
 
 class Category(Base):
@@ -43,12 +63,14 @@ class Category(Base):
     color = Column(String)  # Hex-Farbe
     icon = Column(String)
     budget_monthly = Column(Numeric(10, 2))
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=func.now())
 
     parent = relationship("Category", remote_side=[id], back_populates="children")
     children = relationship("Category", back_populates="parent")
     transactions = relationship("Transaction", back_populates="category")
     rules = relationship("CategorizationRule", back_populates="category")
+    owner = relationship("User", back_populates="categories")
 
 
 class Transaction(Base):
@@ -130,9 +152,11 @@ class CategorizationRule(Base):
     assign_shared = Column(Boolean, default=False)
 
     is_active = Column(Boolean, default=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=func.now())
 
     category = relationship("Category", back_populates="rules")
+    owner = relationship("User", back_populates="rules")
 
 
 class Import(Base):

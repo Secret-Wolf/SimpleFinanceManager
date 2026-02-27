@@ -25,6 +25,19 @@ class ApiClient {
         try {
             const response = await fetch(url, config);
 
+            if (response.status === 401) {
+                // Token expired - try refresh, then redirect to login
+                const refreshed = await this._tryRefresh();
+                if (refreshed) {
+                    // Retry original request
+                    const retryResponse = await fetch(url, config);
+                    if (retryResponse.ok) return await retryResponse.json();
+                }
+                // Refresh failed - show login
+                if (typeof showLogin === 'function') showLogin();
+                throw new Error('Sitzung abgelaufen');
+            }
+
             if (!response.ok) {
                 const error = await response.json().catch(() => ({}));
                 throw new Error(error.detail || `HTTP ${response.status}`);
@@ -34,6 +47,15 @@ class ApiClient {
         } catch (error) {
             console.error('API Error:', error);
             throw error;
+        }
+    }
+
+    async _tryRefresh() {
+        try {
+            const response = await fetch('/api/auth/refresh', { method: 'POST' });
+            return response.ok;
+        } catch (e) {
+            return false;
         }
     }
 

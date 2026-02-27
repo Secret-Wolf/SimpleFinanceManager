@@ -5,7 +5,8 @@ from typing import List, Optional
 from decimal import Decimal
 
 from ..database import get_db
-from ..models import Account, Transaction
+from ..auth import get_current_user
+from ..models import Account, Transaction, User
 from .. import schemas
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
@@ -15,10 +16,11 @@ router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 def get_accounts(
     include_inactive: bool = False,
     profile_id: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Get all accounts, optionally filtered by profile"""
-    query = db.query(Account)
+    query = db.query(Account).filter(Account.user_id == current_user.id)
 
     if not include_inactive:
         query = query.filter(Account.is_active == True)
@@ -33,10 +35,11 @@ def get_accounts(
 @router.get("/summary")
 def get_accounts_summary(
     profile_id: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Get summary of all active accounts with balances"""
-    query = db.query(Account).filter(Account.is_active == True)
+    query = db.query(Account).filter(Account.is_active == True, Account.user_id == current_user.id)
     if profile_id:
         query = query.filter(Account.profile_id == profile_id)
     accounts = query.all()
@@ -95,9 +98,9 @@ def get_accounts_summary(
 
 
 @router.get("/{account_id}")
-def get_account(account_id: int, db: Session = Depends(get_db)):
+def get_account(account_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Get single account with details"""
-    account = db.query(Account).filter(Account.id == account_id).first()
+    account = db.query(Account).filter(Account.id == account_id, Account.user_id == current_user.id).first()
 
     if not account:
         raise HTTPException(status_code=404, detail="Konto nicht gefunden")
@@ -142,10 +145,11 @@ def update_account(
     name: str = None,
     is_active: bool = None,
     profile_id: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Update account (name, active status, profile assignment)"""
-    account = db.query(Account).filter(Account.id == account_id).first()
+    account = db.query(Account).filter(Account.id == account_id, Account.user_id == current_user.id).first()
 
     if not account:
         raise HTTPException(status_code=404, detail="Konto nicht gefunden")

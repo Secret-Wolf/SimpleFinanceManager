@@ -1,7 +1,84 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional, List
+import re
+
+
+# Auth Schemas
+class UserRegister(BaseModel):
+    email: str
+    password: str
+    display_name: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v):
+        pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(pattern, v.strip().lower()):
+            raise ValueError("Ungültige E-Mail-Adresse")
+        return v.strip().lower()
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v):
+        if len(v) < 12:
+            raise ValueError("Passwort muss mindestens 12 Zeichen lang sein")
+        if not re.search(r'[A-Z]', v):
+            raise ValueError("Passwort muss mindestens einen Großbuchstaben enthalten")
+        if not re.search(r'[a-z]', v):
+            raise ValueError("Passwort muss mindestens einen Kleinbuchstaben enthalten")
+        if not re.search(r'[0-9]', v):
+            raise ValueError("Passwort muss mindestens eine Zahl enthalten")
+        return v
+
+    @field_validator("display_name")
+    @classmethod
+    def validate_display_name(cls, v):
+        v = v.strip()
+        if len(v) < 2 or len(v) > 50:
+            raise ValueError("Name muss zwischen 2 und 50 Zeichen lang sein")
+        return v
+
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    display_name: str
+    is_active: bool
+    is_admin: bool
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class UserUpdate(BaseModel):
+    display_name: Optional[str] = None
+    email: Optional[str] = None
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_password(cls, v):
+        if len(v) < 12:
+            raise ValueError("Passwort muss mindestens 12 Zeichen lang sein")
+        if not re.search(r'[A-Z]', v):
+            raise ValueError("Passwort muss mindestens einen Großbuchstaben enthalten")
+        if not re.search(r'[a-z]', v):
+            raise ValueError("Passwort muss mindestens einen Kleinbuchstaben enthalten")
+        if not re.search(r'[0-9]', v):
+            raise ValueError("Passwort muss mindestens eine Zahl enthalten")
+        return v
 
 
 # Profile Schemas

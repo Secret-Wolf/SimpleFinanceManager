@@ -4,7 +4,8 @@ from sqlalchemy import func
 from typing import Optional, List
 
 from ..database import get_db
-from ..models import Category, Transaction
+from ..auth import get_current_user
+from ..models import Category, Transaction, User
 from .. import schemas
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
@@ -54,17 +55,20 @@ def update_full_path(db: Session, category: Category):
 @router.get("", response_model=List[dict])
 def get_categories(
     flat: bool = Query(False, description="Return flat list instead of tree"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Get all categories as tree or flat list"""
 
-    # Get categories with transaction count
+    # Get categories with transaction count (filtered by user)
     categories = db.query(
         Category,
         func.count(Transaction.id).label("transaction_count")
     ).outerjoin(
         Transaction,
         Transaction.category_id == Category.id
+    ).filter(
+        Category.user_id == current_user.id
     ).group_by(Category.id).all()
 
     # Add transaction_count to category objects
@@ -93,7 +97,7 @@ def get_categories(
 
 
 @router.get("/{category_id}", response_model=schemas.Category)
-def get_category(category_id: int, db: Session = Depends(get_db)):
+def get_category(category_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Get single category"""
     category = db.query(Category).filter(Category.id == category_id).first()
 
@@ -113,7 +117,8 @@ def get_category(category_id: int, db: Session = Depends(get_db)):
 @router.post("", response_model=schemas.Category)
 def create_category(
     category_data: schemas.CategoryCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Create new category"""
 
@@ -147,7 +152,8 @@ def create_category(
         parent_id=category_data.parent_id,
         color=category_data.color,
         icon=category_data.icon,
-        budget_monthly=category_data.budget_monthly
+        budget_monthly=category_data.budget_monthly,
+        user_id=current_user.id,
     )
 
     db.add(category)
@@ -165,7 +171,8 @@ def create_category(
 def update_category(
     category_id: int,
     update: schemas.CategoryUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Update category"""
     category = db.query(Category).filter(Category.id == category_id).first()
@@ -240,7 +247,8 @@ def update_category(
 def delete_category(
     category_id: int,
     move_to_category_id: Optional[int] = Query(None, description="Move transactions to this category"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Delete category, optionally moving transactions to another category"""
     category = db.query(Category).filter(Category.id == category_id).first()
@@ -283,11 +291,11 @@ def delete_category(
 
 
 @router.post("/init-defaults")
-def init_default_categories(db: Session = Depends(get_db)):
+def init_default_categories(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Initialize default categories"""
 
-    # Check if categories already exist
-    existing = db.query(Category).count()
+    # Check if categories already exist for this user
+    existing = db.query(Category).filter(Category.user_id == current_user.id).count()
     if existing > 0:
         return {"message": "Kategorien existieren bereits", "count": existing}
 
@@ -353,7 +361,8 @@ def init_default_categories(db: Session = Depends(get_db)):
             category = Category(
                 name=cat_data["name"],
                 color=cat_data.get("color"),
-                full_path=cat_data["name"]
+                full_path=cat_data["name"],
+                user_id=current_user.id,
             )
             db.add(category)
             db.flush()
@@ -368,7 +377,8 @@ def init_default_categories(db: Session = Depends(get_db)):
                     name=cat_data["name"],
                     parent_id=parent_id,
                     color=cat_data.get("color"),
-                    full_path=f"{cat_data['parent']}:{cat_data['name']}"
+                    full_path=f"{cat_data['parent']}:{cat_data['name']}",
+                    user_id=current_user.id,
                 )
                 db.add(category)
 

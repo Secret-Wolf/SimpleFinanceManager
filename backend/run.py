@@ -14,14 +14,20 @@ if __name__ == "__main__":
     data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
     os.makedirs(data_dir, exist_ok=True)
 
+    debug = os.getenv("DEBUG", "false").lower() == "true"
+
     print("=" * 50)
     print("  Finanzmanager")
     print("  http://localhost:8000")
+    if debug:
+        print("  MODE: Development (reload enabled)")
+    else:
+        print("  MODE: Production")
     print("=" * 50)
 
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
         port=8000,
-        reload=True
+        reload=debug,
     )

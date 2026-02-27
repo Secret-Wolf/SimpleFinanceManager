@@ -3,16 +3,60 @@ services:
     image: 192.168.178.30:5000/finanzmanager:latest
     container_name: finanzmanager
     restart: unless-stopped
-    ports:
-      - "8000:8000"
+    # Port nur intern für Traefik erreichbar - NICHT direkt exponieren
+    expose:
+      - "8000"
     volumes:
-      # Datenbank-Volume: Deine bestehende DB hier einfügen
       - ./data:/app/data
     environment:
       - TZ=Europe/Berlin
+      - SECRET_KEY=${SECRET_KEY}
+      - DEBUG=false
+      # Für LAN-only Betrieb ohne Traefik: ALLOWED_ORIGINS leer lassen (same-origin)
+      # Für externen Zugriff: ALLOWED_ORIGINS=https://finance.deinedomain.de
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.finanzmanager.rule=Host(`finance.deinedomain.de`)"
+      - "traefik.http.routers.finanzmanager.entrypoints=websecure"
+      - "traefik.http.routers.finanzmanager.tls.certresolver=letsencrypt"
+      - "traefik.http.services.finanzmanager.loadbalancer.server.port=8000"
+    networks:
+      - web
+
+  # Reverse Proxy mit automatischem HTTPS (Let's Encrypt)
+  # Entferne diesen Block wenn du bereits einen Reverse Proxy hast
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # HTTP -> HTTPS Redirect
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      # Let's Encrypt
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./letsencrypt:/letsencrypt
+    networks:
+      - web
+
+networks:
+  web:
+    driver: bridge
