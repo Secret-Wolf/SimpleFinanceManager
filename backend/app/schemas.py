@@ -81,6 +81,77 @@ class PasswordChange(BaseModel):
         return v
 
 
+class AdminUserUpdate(BaseModel):
+    is_active: Optional[bool] = None
+    display_name: Optional[str] = None
+    new_password: Optional[str] = None
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_password(cls, v):
+        if v is None:
+            return v
+        if len(v) < 12:
+            raise ValueError("Passwort muss mindestens 12 Zeichen lang sein")
+        if not re.search(r'[A-Z]', v):
+            raise ValueError("Passwort muss mindestens einen Großbuchstaben enthalten")
+        if not re.search(r'[a-z]', v):
+            raise ValueError("Passwort muss mindestens einen Kleinbuchstaben enthalten")
+        if not re.search(r'[0-9]', v):
+            raise ValueError("Passwort muss mindestens eine Zahl enthalten")
+        return v
+
+
+# Household Schemas
+class HouseholdCreate(BaseModel):
+    name: str
+
+
+class HouseholdResponse(BaseModel):
+    id: int
+    name: str
+    created_by: int
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class HouseholdMemberResponse(BaseModel):
+    id: int
+    household_id: int
+    user_id: int
+    user_email: Optional[str] = None
+    user_display_name: Optional[str] = None
+    role: str
+    joined_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class HouseholdDetailResponse(HouseholdResponse):
+    members: List[HouseholdMemberResponse] = []
+
+
+class HouseholdInviteCreate(BaseModel):
+    email: str
+
+
+class HouseholdInviteResponse(BaseModel):
+    id: int
+    household_id: int
+    household_name: Optional[str] = None
+    invited_by: int
+    invited_by_name: Optional[str] = None
+    invited_email: str
+    status: str
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
 # Profile Schemas
 class ProfileCreate(BaseModel):
     name: str

@@ -20,6 +20,7 @@ from ..auth import (
 from ..database import get_db
 from ..models import User, Account, Category, CategorizationRule
 from .. import schemas
+from typing import List
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 limiter = Limiter(key_func=get_remote_address)
@@ -245,6 +246,57 @@ def change_password(
     log_auth_event("password_changed", ip=client_ip, user_id=user.id)
 
     return {"message": "Passwort geändert"}
+
+
+@router.get("/users", response_model=List[schemas.UserResponse])
+def list_users(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """List all users (admin only)"""
+    users = db.query(User).order_by(User.created_at).all()
+    return users
+
+
+@router.patch("/users/{user_id}", response_model=schemas.UserResponse)
+def update_user_by_admin(
+    user_id: int,
+    data: schemas.AdminUserUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """Update user account (admin only)"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Benutzer nicht gefunden")
+
+    if data.is_active is False and user.id == admin.id:
+        raise HTTPException(
+            status_code=400,
+            detail="Eigenes Konto kann nicht deaktiviert werden"
+        )
+
+    if data.is_active is not None:
+        user.is_active = data.is_active
+
+    if data.display_name is not None:
+        user.display_name = data.display_name.strip()
+
+    if data.new_password is not None:
+        user.hashed_password = get_password_hash(data.new_password)
+
+    db.commit()
+    db.refresh(user)
+
+    log_auth_event(
+        "admin_user_update",
+        ip="internal",
+        user_id=user.id,
+        user_email=user.email,
+        detail=f"updated_by_admin_id={admin.id}",
+    )
+
+    return user
 
 
 @router.get("/setup-required")

@@ -159,6 +159,46 @@ class CategorizationRule(Base):
     owner = relationship("User", back_populates="rules")
 
 
+class Household(Base):
+    __tablename__ = "households"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=func.now())
+
+    members = relationship("HouseholdMember", back_populates="household", cascade="all, delete-orphan")
+    invites = relationship("HouseholdInvite", back_populates="household", cascade="all, delete-orphan")
+    creator = relationship("User", foreign_keys=[created_by])
+
+
+class HouseholdMember(Base):
+    __tablename__ = "household_members"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    household_id = Column(Integer, ForeignKey("households.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    role = Column(String, default="member")  # "admin" or "member"
+    joined_at = Column(DateTime, default=func.now())
+
+    household = relationship("Household", back_populates="members")
+    user = relationship("User")
+
+
+class HouseholdInvite(Base):
+    __tablename__ = "household_invites"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    household_id = Column(Integer, ForeignKey("households.id"), nullable=False)
+    invited_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    invited_email = Column(String, nullable=False)
+    status = Column(String, default="pending")  # "pending", "accepted", "declined"
+    created_at = Column(DateTime, default=func.now())
+
+    household = relationship("Household", back_populates="invites")
+    inviter = relationship("User", foreign_keys=[invited_by])
+
+
 class Import(Base):
     __tablename__ = "imports"
 

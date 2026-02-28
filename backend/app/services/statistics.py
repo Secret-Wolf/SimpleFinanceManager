@@ -14,26 +14,26 @@ def _get_profile_account_ids(db: Session, profile_id: int) -> List[int]:
     return [a.id for a in db.query(Account.id).filter(Account.profile_id == profile_id).all()]
 
 
-def _apply_filters(query, account_id=None, profile_id=None, shared_only=False, db=None):
-    """Apply common filters to a transaction query"""
-    if account_id:
-        query = query.filter(Transaction.account_id == account_id)
-    elif profile_id and db:
-        account_ids = _get_profile_account_ids(db, profile_id)
-        if account_ids:
-            query = query.filter(Transaction.account_id.in_(account_ids))
-        else:
-            query = query.filter(Transaction.id == -1)
-    if shared_only:
-        query = query.filter(Transaction.is_shared == True)
+def _apply_user_scope(query, user_account_ids: List[int] = None):
+    """Apply base user scope to a transaction query"""
+    if user_account_ids is not None:
+        query = query.filter(Transaction.account_id.in_(user_account_ids))
     return query
 
 
-def get_current_balance(db: Session, account_id: int = None, account_iban: str = None, profile_id: int = None) -> Optional[Decimal]:
+def get_current_balance(
+    db: Session,
+    account_id: int = None,
+    account_iban: str = None,
+    profile_id: int = None,
+    user_account_ids: List[int] = None
+) -> Optional[Decimal]:
     """Get balance from most recent transaction"""
     if profile_id:
-        # Sum balances across all profile accounts
         account_ids = _get_profile_account_ids(db, profile_id)
+        # Intersect with user scope
+        if user_account_ids is not None:
+            account_ids = [a for a in account_ids if a in user_account_ids]
         if not account_ids:
             return None
         total = Decimal("0")
@@ -51,6 +51,7 @@ def get_current_balance(db: Session, account_id: int = None, account_iban: str =
         Transaction.balance_after != None,
         Transaction.is_split_parent == False
     )
+    query = _apply_user_scope(query, user_account_ids)
 
     if account_id:
         query = query.filter(Transaction.account_id == account_id)
@@ -69,7 +70,8 @@ def get_period_totals(
     account_id: int = None,
     account_iban: str = None,
     profile_id: int = None,
-    shared_only: bool = False
+    shared_only: bool = False,
+    user_account_ids: List[int] = None
 ) -> Dict[str, Decimal]:
     """Get income and expenses for a period"""
 
@@ -78,6 +80,7 @@ def get_period_totals(
         Transaction.booking_date <= end_date,
         Transaction.is_split_parent == False
     )
+    query = _apply_user_scope(query, user_account_ids)
 
     if account_id:
         query = query.filter(Transaction.account_id == account_id)
@@ -85,6 +88,8 @@ def get_period_totals(
         query = query.filter(Transaction.account_iban == account_iban)
     elif profile_id:
         account_ids = _get_profile_account_ids(db, profile_id)
+        if user_account_ids is not None:
+            account_ids = [a for a in account_ids if a in user_account_ids]
         if account_ids:
             query = query.filter(Transaction.account_id.in_(account_ids))
         else:
@@ -122,7 +127,8 @@ def get_top_categories(
     limit: int = 5,
     expenses_only: bool = True,
     account_id: int = None,
-    profile_id: int = None
+    profile_id: int = None,
+    user_account_ids: List[int] = None
 ) -> List[Dict]:
     """Get top spending categories"""
 
@@ -139,10 +145,15 @@ def get_top_categories(
         Transaction.is_split_parent == False
     )
 
+    if user_account_ids is not None:
+        query = query.filter(Transaction.account_id.in_(user_account_ids))
+
     if account_id:
         query = query.filter(Transaction.account_id == account_id)
     elif profile_id:
         account_ids = _get_profile_account_ids(db, profile_id)
+        if user_account_ids is not None:
+            account_ids = [a for a in account_ids if a in user_account_ids]
         if account_ids:
             query = query.filter(Transaction.account_id.in_(account_ids))
 
@@ -164,30 +175,49 @@ def get_top_categories(
     ]
 
 
-def get_uncategorized_count(db: Session, account_id: int = None, profile_id: int = None) -> int:
+def get_uncategorized_count(
+    db: Session,
+    account_id: int = None,
+    profile_id: int = None,
+    user_account_ids: List[int] = None
+) -> int:
     """Count transactions without category"""
     query = db.query(Transaction).filter(
         Transaction.category_id == None,
         Transaction.is_split_parent == False
     )
+    query = _apply_user_scope(query, user_account_ids)
+
     if account_id:
         query = query.filter(Transaction.account_id == account_id)
     elif profile_id:
         account_ids = _get_profile_account_ids(db, profile_id)
+        if user_account_ids is not None:
+            account_ids = [a for a in account_ids if a in user_account_ids]
         if account_ids:
             query = query.filter(Transaction.account_id.in_(account_ids))
     return query.count()
 
 
-def get_recent_transactions(db: Session, limit: int = 10, account_id: int = None, profile_id: int = None) -> List[Transaction]:
+def get_recent_transactions(
+    db: Session,
+    limit: int = 10,
+    account_id: int = None,
+    profile_id: int = None,
+    user_account_ids: List[int] = None
+) -> List[Transaction]:
     """Get most recent transactions"""
     query = db.query(Transaction).filter(
         Transaction.is_split_parent == False
     )
+    query = _apply_user_scope(query, user_account_ids)
+
     if account_id:
         query = query.filter(Transaction.account_id == account_id)
     elif profile_id:
         account_ids = _get_profile_account_ids(db, profile_id)
+        if user_account_ids is not None:
+            account_ids = [a for a in account_ids if a in user_account_ids]
         if account_ids:
             query = query.filter(Transaction.account_id.in_(account_ids))
     return query.order_by(
@@ -196,29 +226,42 @@ def get_recent_transactions(db: Session, limit: int = 10, account_id: int = None
     ).limit(limit).all()
 
 
-def get_shared_expenses_current_month(db: Session) -> Decimal:
+def get_shared_expenses_current_month(db: Session, user_account_ids: List[int] = None) -> Decimal:
     """Get total shared expenses for current month"""
     today = date.today()
     first_of_month = date(today.year, today.month, 1)
 
-    result = db.query(func.sum(Transaction.amount)).filter(
+    query = db.query(func.sum(Transaction.amount)).filter(
         Transaction.is_shared == True,
         Transaction.amount < 0,
         Transaction.booking_date >= first_of_month,
         Transaction.booking_date <= today,
         Transaction.is_split_parent == False
-    ).scalar()
+    )
+    if user_account_ids is not None:
+        query = query.filter(Transaction.account_id.in_(user_account_ids))
+
+    result = query.scalar()
 
     return abs(result) if result else Decimal("0")
 
 
-def get_dashboard_summary(db: Session, account_id: int = None, profile_id: int = None) -> schemas.DashboardSummary:
+def get_dashboard_summary(
+    db: Session,
+    account_id: int = None,
+    profile_id: int = None,
+    user_account_ids: List[int] = None
+) -> schemas.DashboardSummary:
     """Get all dashboard data"""
     today = date.today()
 
     # Current month
     current_start, current_end = get_month_range(today.year, today.month)
-    current_totals = get_period_totals(db, current_start, current_end, account_id=account_id, profile_id=profile_id)
+    current_totals = get_period_totals(
+        db, current_start, current_end,
+        account_id=account_id, profile_id=profile_id,
+        user_account_ids=user_account_ids
+    )
 
     # Previous month
     if today.month == 1:
@@ -227,22 +270,41 @@ def get_dashboard_summary(db: Session, account_id: int = None, profile_id: int =
         prev_year, prev_month = today.year, today.month - 1
 
     prev_start, prev_end = get_month_range(prev_year, prev_month)
-    prev_totals = get_period_totals(db, prev_start, prev_end, account_id=account_id, profile_id=profile_id)
+    prev_totals = get_period_totals(
+        db, prev_start, prev_end,
+        account_id=account_id, profile_id=profile_id,
+        user_account_ids=user_account_ids
+    )
 
     # Top categories for current month
-    top_cats = get_top_categories(db, current_start, current_end, account_id=account_id, profile_id=profile_id)
+    top_cats = get_top_categories(
+        db, current_start, current_end,
+        account_id=account_id, profile_id=profile_id,
+        user_account_ids=user_account_ids
+    )
 
     # Recent transactions
-    recent = get_recent_transactions(db, account_id=account_id, profile_id=profile_id)
+    recent = get_recent_transactions(
+        db, account_id=account_id, profile_id=profile_id,
+        user_account_ids=user_account_ids
+    )
 
     return schemas.DashboardSummary(
-        current_balance=get_current_balance(db, account_id=account_id, profile_id=profile_id),
+        current_balance=get_current_balance(
+            db, account_id=account_id, profile_id=profile_id,
+            user_account_ids=user_account_ids
+        ),
         income_current_month=current_totals["income"],
         expenses_current_month=current_totals["expenses"],
         income_previous_month=prev_totals["income"],
         expenses_previous_month=prev_totals["expenses"],
-        shared_expenses_current_month=get_shared_expenses_current_month(db),
-        uncategorized_count=get_uncategorized_count(db, account_id=account_id, profile_id=profile_id),
+        shared_expenses_current_month=get_shared_expenses_current_month(
+            db, user_account_ids=user_account_ids
+        ),
+        uncategorized_count=get_uncategorized_count(
+            db, account_id=account_id, profile_id=profile_id,
+            user_account_ids=user_account_ids
+        ),
         top_categories=top_cats,
         recent_transactions=recent
     )
@@ -255,7 +317,8 @@ def get_stats_by_category(
     include_income: bool = False,
     account_id: int = None,
     profile_id: int = None,
-    shared_only: bool = False
+    shared_only: bool = False,
+    user_account_ids: List[int] = None
 ) -> schemas.StatsByCategory:
     """Get statistics grouped by category"""
 
@@ -269,10 +332,14 @@ def get_stats_by_category(
         Transaction.booking_date <= end_date,
         Transaction.is_split_parent == False
     ]
+    if user_account_ids is not None:
+        join_conditions.append(Transaction.account_id.in_(user_account_ids))
     if account_id:
         join_conditions.append(Transaction.account_id == account_id)
     elif profile_id:
         account_ids = _get_profile_account_ids(db, profile_id)
+        if user_account_ids is not None:
+            account_ids = [a for a in account_ids if a in user_account_ids]
         if account_ids:
             join_conditions.append(Transaction.account_id.in_(account_ids))
     if shared_only:
@@ -322,10 +389,14 @@ def get_stats_by_category(
         Transaction.booking_date <= end_date,
         Transaction.is_split_parent == False
     )
+    if user_account_ids is not None:
+        uncat_query = uncat_query.filter(Transaction.account_id.in_(user_account_ids))
     if account_id:
         uncat_query = uncat_query.filter(Transaction.account_id == account_id)
     elif profile_id:
         account_ids = _get_profile_account_ids(db, profile_id)
+        if user_account_ids is not None:
+            account_ids = [a for a in account_ids if a in user_account_ids]
         if account_ids:
             uncat_query = uncat_query.filter(Transaction.account_id.in_(account_ids))
     if shared_only:
@@ -365,7 +436,8 @@ def get_stats_over_time(
     group_by: str = "month",  # "day", "week", "month"
     account_id: int = None,
     profile_id: int = None,
-    shared_only: bool = False
+    shared_only: bool = False,
+    user_account_ids: List[int] = None
 ) -> schemas.StatsOverTime:
     """Get income/expenses over time"""
 
@@ -374,10 +446,14 @@ def get_stats_over_time(
         Transaction.booking_date <= end_date,
         Transaction.is_split_parent == False
     )
+    query = _apply_user_scope(query, user_account_ids)
+
     if account_id:
         query = query.filter(Transaction.account_id == account_id)
     elif profile_id:
         account_ids = _get_profile_account_ids(db, profile_id)
+        if user_account_ids is not None:
+            account_ids = [a for a in account_ids if a in user_account_ids]
         if account_ids:
             query = query.filter(Transaction.account_id.in_(account_ids))
     if shared_only:
@@ -427,51 +503,61 @@ def get_stats_over_time(
 def get_shared_summary(
     db: Session,
     start_date: date,
-    end_date: date
+    end_date: date,
+    household_account_ids: List[int] = None
 ) -> schemas.SharedSummary:
-    """Get shared expenses summary across all profiles"""
+    """Get shared expenses summary across household members"""
 
-    # Get all shared expense transactions in period
-    shared_txs = db.query(Transaction).filter(
+    query = db.query(Transaction).filter(
         Transaction.is_shared == True,
         Transaction.amount < 0,
         Transaction.booking_date >= start_date,
         Transaction.booking_date <= end_date,
         Transaction.is_split_parent == False
-    ).all()
+    )
+    if household_account_ids is not None:
+        query = query.filter(Transaction.account_id.in_(household_account_ids))
+
+    shared_txs = query.all()
 
     total_shared = Decimal("0")
-    profile_totals = {}  # profile_id -> total paid
+    user_totals = {}  # user_id -> total paid
 
     for tx in shared_txs:
         amount = abs(tx.amount)
         total_shared += amount
 
-        # Find profile via account
+        # Find user via account
         if tx.account_id:
             account = db.query(Account).filter(Account.id == tx.account_id).first()
-            pid = account.profile_id if account else None
+            uid = account.user_id if account else None
         else:
-            pid = None
+            uid = None
 
-        if pid not in profile_totals:
-            profile_totals[pid] = Decimal("0")
-        profile_totals[pid] += amount
+        if uid not in user_totals:
+            user_totals[uid] = Decimal("0")
+        user_totals[uid] += amount
 
-    # Build profile expenses list
-    profiles = db.query(Profile).all()
-    profile_map = {p.id: p for p in profiles}
-
+    # Build member expenses list using User model
+    from ..models import User
     by_profile = []
-    for pid, total_paid in profile_totals.items():
-        if pid and pid in profile_map:
-            p = profile_map[pid]
-            by_profile.append(schemas.ProfileExpenses(
-                profile_id=p.id,
-                profile_name=p.name,
-                profile_color=p.color,
-                total_paid=total_paid
-            ))
+    for uid, total_paid in user_totals.items():
+        if uid:
+            user = db.query(User).filter(User.id == uid).first()
+            if user:
+                by_profile.append(schemas.ProfileExpenses(
+                    profile_id=user.id,
+                    profile_name=user.display_name,
+                    profile_color="#2563eb",
+                    total_paid=total_paid
+                ))
+            else:
+                by_profile.append(schemas.ProfileExpenses(
+                    profile_id=0,
+                    profile_name="Unbekannt",
+                    profile_color="#888888",
+                    total_paid=total_paid
+                ))
         else:
             by_profile.append(schemas.ProfileExpenses(
                 profile_id=0,
@@ -499,7 +585,11 @@ def get_shared_summary(
         Transaction.booking_date >= start_date,
         Transaction.booking_date <= end_date,
         Transaction.is_split_parent == False
-    ).group_by(Category.id).order_by(func.sum(Transaction.amount).asc()).all()
+    )
+    if household_account_ids is not None:
+        cat_query = cat_query.filter(Transaction.account_id.in_(household_account_ids))
+
+    cat_results = cat_query.group_by(Category.id).order_by(func.sum(Transaction.amount).asc()).all()
 
     by_category = [
         schemas.CategoryStats(
@@ -510,7 +600,7 @@ def get_shared_summary(
             average_monthly=abs(r.total) / months if r.total else Decimal("0"),
             transaction_count=r.count or 0
         )
-        for r in cat_query
+        for r in cat_results
     ]
 
     return schemas.SharedSummary(

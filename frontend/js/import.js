@@ -4,9 +4,6 @@ function initImportPage() {
     const dropzone = document.getElementById('dropzone');
     const fileInput = document.getElementById('file-input');
 
-    // Populate import profile dropdown
-    populateImportProfileDropdown();
-
     // Drag and drop events
     dropzone.addEventListener('dragover', (e) => {
         e.preventDefault();
@@ -49,9 +46,7 @@ async function handleFileUpload(file) {
 
     const dropzone = document.getElementById('dropzone');
     const bankFormat = document.getElementById('bank-format').value;
-    const importProfileSelect = document.getElementById('import-profile');
-    // Use import dropdown value, fallback to global profile filter
-    const profileId = (importProfileSelect && importProfileSelect.value) ? importProfileSelect.value : (selectedProfileId || null);
+    const profileId = null; // profiles deprecated
     const originalContent = dropzone.innerHTML;
 
     dropzone.innerHTML = `

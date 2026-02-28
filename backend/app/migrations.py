@@ -179,4 +179,51 @@ def run_migrations():
                 conn.commit()
                 logger.info("Migration: user_id added to imports")
 
+        # Migration 11: Add households table
+        if 'households' not in inspector.get_table_names():
+            logger.info("Migration: Creating households table")
+            conn.execute(text("""
+                CREATE TABLE households (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name VARCHAR(200) NOT NULL,
+                    created_by INTEGER NOT NULL REFERENCES users(id),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.commit()
+            logger.info("Migration: households table created")
+            inspector = inspect(engine)
+
+        # Migration 12: Add household_members table
+        if 'household_members' not in inspector.get_table_names():
+            logger.info("Migration: Creating household_members table")
+            conn.execute(text("""
+                CREATE TABLE household_members (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    household_id INTEGER NOT NULL REFERENCES households(id),
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    role VARCHAR(20) DEFAULT 'member',
+                    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.commit()
+            logger.info("Migration: household_members table created")
+            inspector = inspect(engine)
+
+        # Migration 13: Add household_invites table
+        if 'household_invites' not in inspector.get_table_names():
+            logger.info("Migration: Creating household_invites table")
+            conn.execute(text("""
+                CREATE TABLE household_invites (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    household_id INTEGER NOT NULL REFERENCES households(id),
+                    invited_by INTEGER NOT NULL REFERENCES users(id),
+                    invited_email VARCHAR(255) NOT NULL,
+                    status VARCHAR(20) DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.commit()
+            logger.info("Migration: household_invites table created")
+
         logger.info("All migrations completed")

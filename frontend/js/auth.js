@@ -67,6 +67,15 @@ function showApp() {
     if (userDisplay && currentUser) {
         userDisplay.textContent = currentUser.display_name;
     }
+
+    // Show/hide admin-only elements
+    document.querySelectorAll('.admin-only').forEach(el => {
+        if (currentUser && currentUser.is_admin) {
+            el.classList.remove('hidden');
+        } else {
+            el.classList.add('hidden');
+        }
+    });
 }
 
 async function handleLogin(e) {

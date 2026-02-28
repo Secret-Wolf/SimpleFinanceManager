@@ -261,6 +261,70 @@ class ApiClient {
         });
     }
 
+    // Users (admin only)
+    async getUsers() {
+        return this.request('/auth/users');
+    }
+
+    async updateUser(id, data) {
+        return this.request(`/auth/users/${id}`, {
+            method: 'PATCH',
+            body: data
+        });
+    }
+
+    async createUser(data) {
+        return this.request('/auth/register-user', {
+            method: 'POST',
+            body: data
+        });
+    }
+
+    // Households
+    async getHouseholds() {
+        return this.request('/households');
+    }
+
+    async getHousehold(id) {
+        return this.request(`/households/${id}`);
+    }
+
+    async createHousehold(data) {
+        return this.request('/households', {
+            method: 'POST',
+            body: data
+        });
+    }
+
+    async inviteToHousehold(householdId, email) {
+        return this.request(`/households/${householdId}/invite`, {
+            method: 'POST',
+            body: { email }
+        });
+    }
+
+    async getHouseholdInvites() {
+        return this.request('/households/invites');
+    }
+
+    async acceptInvite(inviteId) {
+        return this.request(`/households/invites/${inviteId}/accept`, {
+            method: 'POST'
+        });
+    }
+
+    async declineInvite(inviteId) {
+        return this.request(`/households/invites/${inviteId}/decline`, {
+            method: 'POST'
+        });
+    }
+
+    async leaveHousehold(householdId, userId) {
+        return this.request(`/households/${householdId}/members/${userId}`, {
+            method: 'DELETE'
+        });
+    }
+
     // Profiles
     async getProfiles() {
         return this.request('/profiles');

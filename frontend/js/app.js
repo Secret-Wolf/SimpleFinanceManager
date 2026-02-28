@@ -5,8 +5,8 @@ let currentPage = 'dashboard';
 let categories = [];
 let flatCategories = [];
 let selectedAccountId = null; // null = Alle Konten
-let selectedProfileId = null; // null = Alle Profile
-let sharedMode = false; // true = "Gemeinsamer Haushalt" view
+let selectedProfileId = null; // deprecated, kept for compatibility
+let sharedMode = false; // deprecated
 let accounts = [];
 
 // Navigation
@@ -55,6 +55,12 @@ function navigateTo(page) {
             break;
         case 'profiles':
             loadProfileManagement();
+            break;
+        case 'users':
+            loadUserManagement();
+            break;
+        case 'households':
+            loadHouseholdManagement();
             break;
     }
 }

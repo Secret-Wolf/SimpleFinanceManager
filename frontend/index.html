@@ -62,13 +62,8 @@
             <div class="sidebar-header">
                 <h1>Finanzmanager</h1>
             </div>
-            <!-- Profile Selector -->
-            <div class="profile-selector" style="display: none;">
-                <label>Profil</label>
-                <select id="global-profile-filter" onchange="onProfileFilterChange()">
-                    <option value="">Alle Profile</option>
-                </select>
-            </div>
+            <!-- Profile Selector (deprecated, hidden) -->
+            <div class="profile-selector" style="display: none;"></div>
             <!-- Account Selector -->
             <div class="account-selector">
                 <label>Konto</label>
@@ -133,14 +128,21 @@
                     </svg>
                     <span>Import</span>
                 </a>
-                <a class="nav-item" data-page="profiles">
+                <a class="nav-item" data-page="households">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <span>Haushalt</span>
+                </a>
+                <a class="nav-item admin-only hidden" data-page="users">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
                         <circle cx="9" cy="7" r="4"></circle>
                         <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
                         <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                     </svg>
-                    <span>Profile</span>
+                    <span>Benutzer</span>
                 </a>
             </nav>
             <div class="sidebar-footer">
@@ -441,14 +443,50 @@
                 </div>
             </div>
 
-            <!-- Profiles Page -->
-            <div id="page-profiles" class="page hidden">
-                <div class="page-header">
-                    <h2>Profile</h2>
-                    <p>Profile und Konten-Zuordnung verwalten</p>
+            <!-- Profiles Page (legacy, hidden) -->
+            <div id="page-profiles" class="page hidden"></div>
+
+            <!-- Households Page -->
+            <div id="page-households" class="page hidden">
+                <div class="page-header flex justify-between items-center">
+                    <div>
+                        <h2>Haushalt</h2>
+                        <p>Gemeinsame Finanzen verwalten</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="showCreateHouseholdModal()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                        Neuer Haushalt
+                    </button>
                 </div>
 
-                <div id="profiles-content">
+                <!-- Pending Invites -->
+                <div id="household-invites" class="hidden" style="margin-bottom: 20px;"></div>
+
+                <!-- Households List -->
+                <div id="households-content">
+                    <div class="loading-overlay"><div class="spinner"></div></div>
+                </div>
+            </div>
+
+            <!-- User Management Page (admin only) -->
+            <div id="page-users" class="page hidden">
+                <div class="page-header flex justify-between items-center">
+                    <div>
+                        <h2>Benutzerverwaltung</h2>
+                        <p>Benutzerkonten verwalten</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="showCreateUserModal()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                        Neuer Benutzer
+                    </button>
+                </div>
+                <div id="users-content">
                     <div class="loading-overlay"><div class="spinner"></div></div>
                 </div>
             </div>
@@ -469,12 +507,6 @@
                                     <option value="auto">Automatisch erkennen</option>
                                     <option value="volksbank">Volksbank / VR-Bank</option>
                                     <option value="ing">ING</option>
-                                </select>
-                            </div>
-                            <div class="form-group" style="max-width: 300px; margin-bottom: 0;">
-                                <label>Profil zuordnen</label>
-                                <select id="import-profile" class="form-control">
-                                    <option value="">Kein Profil</option>
                                 </select>
                             </div>
                         </div>
@@ -901,6 +933,96 @@
         </div>
     </div>
 
+    <!-- User Management Modal -->
+    <div id="user-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="user-modal-title">Neuer Benutzer</h3>
+                <button class="modal-close" onclick="closeModal('user-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="user-edit-id">
+                <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" id="user-name-input" class="form-control" required placeholder="Anzeigename">
+                </div>
+                <div class="form-group" id="user-email-group">
+                    <label>E-Mail</label>
+                    <input type="email" id="user-email-input" class="form-control" required autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label id="user-password-label">Passwort</label>
+                    <input type="password" id="user-password-input" class="form-control" autocomplete="new-password" minlength="12">
+                    <small id="user-password-hint" style="color: var(--text-secondary);">Min. 12 Zeichen, Gross-/Kleinbuchstaben + Zahl</small>
+                </div>
+                <div id="user-modal-error" class="auth-error"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('user-modal')">Abbrechen</button>
+                <button class="btn btn-primary" onclick="saveUser()">Speichern</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Household Modal -->
+    <div id="household-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="household-modal-title">Neuer Haushalt</h3>
+                <button class="modal-close" onclick="closeModal('household-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Name des Haushalts</label>
+                    <input type="text" id="household-name-input" class="form-control" placeholder="z.B. WG Musterstrasse">
+                </div>
+                <div id="household-modal-error" class="auth-error"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('household-modal')">Abbrechen</button>
+                <button class="btn btn-primary" onclick="saveHousehold()">Erstellen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Household Invite Modal -->
+    <div id="invite-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Mitglied einladen</h3>
+                <button class="modal-close" onclick="closeModal('invite-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="invite-household-id">
+                <div class="form-group">
+                    <label>E-Mail des Benutzers</label>
+                    <input type="email" id="invite-email-input" class="form-control" placeholder="nutzer@example.com">
+                    <small style="color: var(--text-secondary);">Der Benutzer muss bereits ein Konto haben</small>
+                </div>
+                <div id="invite-modal-error" class="auth-error"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('invite-modal')">Abbrechen</button>
+                <button class="btn btn-primary" onclick="sendInvite()">Einladen</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Container -->
     <div id="toast-container" class="toast-container"></div>
 
@@ -914,6 +1036,8 @@
     <script src="/static/js/statistics.js"></script>
     <script src="/static/js/accounts.js"></script>
     <script src="/static/js/profiles.js"></script>
+    <script src="/static/js/users.js"></script>
+    <script src="/static/js/households.js"></script>
     <script src="/static/js/app.js"></script>
     <script src="/static/js/auth.js"></script>
 </body>
