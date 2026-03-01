@@ -85,3 +85,10 @@ temp/
 
 # Lokale Deployment-Anleitung (enthält interne IPs)
 DEPLOYMENT-LOKAL.md
+
+# Sensitive Dateien
+Backup/
+.secret_key
+*secret_key*
+PLAN-MULTIKONTO.md
+SECURITY-AUDIT.md
