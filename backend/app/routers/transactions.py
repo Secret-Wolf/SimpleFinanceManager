@@ -6,12 +6,15 @@ from datetime import date
 from decimal import Decimal
 import hashlib
 import uuid
+import logging
 
 from ..audit import log_data_event
 from ..database import get_db
 from ..auth import get_current_user
 from ..models import Transaction, Category, Account, User
 from .. import schemas
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 
@@ -20,8 +23,8 @@ router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 def get_transactions(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
-    sort_by: str = Query("booking_date", regex="^(booking_date|amount|counterpart_name|category)$"),
-    sort_order: str = Query("desc", regex="^(asc|desc)$"),
+    sort_by: str = Query("booking_date", pattern="^(booking_date|amount|counterpart_name|category)$"),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$"),
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     category_id: Optional[int] = None,
@@ -30,7 +33,7 @@ def get_transactions(
     account_iban: Optional[str] = None,
     profile_id: Optional[int] = None,
     shared_only: bool = False,
-    amount_type: Optional[str] = Query(None, regex="^(income|expenses|all)$"),
+    amount_type: Optional[str] = Query(None, pattern="^(income|expenses|all)$"),
     search: Optional[str] = None,
     uncategorized_only: bool = False,
     db: Session = Depends(get_db),
@@ -40,6 +43,7 @@ def get_transactions(
 
     # User isolation: only show transactions from user's accounts
     user_account_ids = [a.id for a in db.query(Account.id).filter(Account.user_id == current_user.id).all()]
+    logger.info(f"[Transactions] user={current_user.id} account_id={account_id} user_account_ids={user_account_ids}")
 
     query = db.query(Transaction).options(
         joinedload(Transaction.category)
@@ -101,6 +105,7 @@ def get_transactions(
 
     # Get total count
     total = query.count()
+    logger.info(f"[Transactions] account_id={account_id} total_results={total}")
 
     # Apply sorting
     if sort_by == "booking_date":

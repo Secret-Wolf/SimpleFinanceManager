@@ -179,6 +179,37 @@ def run_migrations():
                 conn.commit()
                 logger.info("Migration: user_id added to imports")
 
+        # Migration 10a: Link orphaned transactions to accounts by IBAN
+        if 'transactions' in existing_tables and 'accounts' in existing_tables:
+            tx_cols = [col['name'] for col in inspector.get_columns('transactions')]
+            if 'account_id' in tx_cols and 'account_iban' in tx_cols:
+                result = conn.execute(text("""
+                    UPDATE transactions SET account_id = (
+                        SELECT accounts.id FROM accounts WHERE accounts.iban = transactions.account_iban
+                    )
+                    WHERE transactions.account_id IS NULL AND transactions.account_iban IS NOT NULL
+                """))
+                if result.rowcount > 0:
+                    logger.info(f"Migration: Linked {result.rowcount} orphaned transactions to accounts by IBAN")
+                conn.commit()
+
+        # Migration 10b: Assign orphaned accounts/categories/rules to first admin user
+        first_admin = conn.execute(text(
+            "SELECT id FROM users WHERE is_admin = 1 ORDER BY id LIMIT 1"
+        )).fetchone()
+        if first_admin:
+            admin_id = first_admin[0]
+            for table_name in ['accounts', 'categories', 'categorization_rules']:
+                if table_name in inspector.get_table_names():
+                    columns = [col['name'] for col in inspector.get_columns(table_name)]
+                    if 'user_id' in columns:
+                        result = conn.execute(text(
+                            f"UPDATE {table_name} SET user_id = :admin_id WHERE user_id IS NULL"
+                        ), {"admin_id": admin_id})
+                        if result.rowcount > 0:
+                            logger.info(f"Migration: Assigned {result.rowcount} orphaned {table_name} to admin user {admin_id}")
+            conn.commit()
+
         # Migration 11: Add households table
         if 'households' not in inspector.get_table_names():
             logger.info("Migration: Creating households table")

@@ -48,10 +48,10 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
 
-    # CSP - allow self only, inline styles needed for the current frontend
+    # CSP - allow self + inline handlers (frontend uses onclick/onchange extensively)
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data:; "
         "font-src 'self'; "
@@ -62,6 +62,10 @@ async def add_security_headers(request: Request, call_next):
     # HSTS only when not in debug mode (assumes HTTPS via reverse proxy)
     if not settings.DEBUG:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
+    # Prevent caching of static files in debug mode
+    if settings.DEBUG and request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
 
     return response
 

@@ -318,6 +318,7 @@ function onAccountFilterChange() {
     const value = dropdown.value;
 
     selectedAccountId = value ? parseInt(value) : null;
+    console.log('[AccountFilter] Changed to:', selectedAccountId, '(raw value:', value, ')');
 
     // Update header to show selected account
     updateAccountHeader();

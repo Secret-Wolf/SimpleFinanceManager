@@ -108,7 +108,7 @@ def get_summary(
 def get_by_category(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
-    period: str = Query("month", regex="^(week|month|last_month|quarter|year|since_salary|custom)$"),
+    period: str = Query("month", pattern="^(week|month|last_month|quarter|year|since_salary|custom)$"),
     account_id: Optional[int] = None,
     profile_id: Optional[int] = None,
     shared_only: bool = False,
@@ -166,8 +166,8 @@ def get_by_category(
 def get_over_time(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
-    period: str = Query("year", regex="^(month|last_month|quarter|year|since_salary|custom)$"),
-    group_by: str = Query("month", regex="^(day|week|month)$"),
+    period: str = Query("year", pattern="^(month|last_month|quarter|year|since_salary|custom)$"),
+    group_by: str = Query("month", pattern="^(day|week|month)$"),
     account_id: Optional[int] = None,
     profile_id: Optional[int] = None,
     shared_only: bool = False,
@@ -240,7 +240,7 @@ def get_over_time(
 def get_shared_stats(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
-    period: str = Query("month", regex="^(week|month|last_month|quarter|year|since_salary|custom)$"),
+    period: str = Query("month", pattern="^(week|month|last_month|quarter|year|since_salary|custom)$"),
     household_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

@@ -33,6 +33,7 @@ async function loadTransactions() {
         if (selectedAccountId) {
             params.account_id = selectedAccountId;
         }
+        console.log('[Transactions] Loading with params:', JSON.stringify(params));
 
         // Add profile/shared filter
         if (sharedMode) {
