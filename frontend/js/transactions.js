@@ -14,35 +14,27 @@ let transactionFilters = {
 };
 
 let selectedTransactions = new Set();
+let isLoadingMore = false;
+let hasMoreTransactions = true;
+let totalTransactionCount = 0;
 
 async function loadTransactions() {
     const container = document.getElementById('transactions-table');
     const paginationContainer = document.getElementById('transactions-pagination');
 
+    // Reset infinite scroll state
+    transactionFilters.page = 1;
+    hasMoreTransactions = true;
+    isLoadingMore = false;
+
     container.innerHTML = '<tr><td colspan="6"><div class="loading-overlay"><div class="spinner"></div></div></td></tr>';
 
     try {
-        const params = { ...transactionFilters };
-        if (!params.search) delete params.search;
-        if (!params.start_date) delete params.start_date;
-        if (!params.end_date) delete params.end_date;
-        if (!params.category_id) delete params.category_id;
-        if (!params.amount_type) delete params.amount_type;
-
-        // Add account filter if selected
-        if (selectedAccountId) {
-            params.account_id = selectedAccountId;
-        }
-        console.log('[Transactions] Loading with params:', JSON.stringify(params));
-
-        // Add profile/shared filter
-        if (sharedMode) {
-            params.shared_only = true;
-        } else if (selectedProfileId) {
-            params.profile_id = selectedProfileId;
-        }
-
+        const params = buildTransactionParams();
         const result = await api.getTransactions(params);
+
+        totalTransactionCount = result.total;
+        hasMoreTransactions = result.page < result.pages;
 
         if (result.items.length === 0) {
             container.innerHTML = `
@@ -64,126 +56,206 @@ async function loadTransactions() {
             return;
         }
 
-        container.innerHTML = result.items.map(tx => `
-            <tr data-id="${tx.id}">
-                <td>
-                    <input type="checkbox" class="checkbox tx-checkbox" data-id="${tx.id}"
-                        ${selectedTransactions.has(tx.id) ? 'checked' : ''}>
-                </td>
-                <td>${formatDate(tx.booking_date)}</td>
-                <td>
-                    <div>
-                        ${tx.is_shared ? '<span class="shared-badge" title="Gemeinsame Ausgabe">G</span>' : ''}
-                        ${escapeHtml(truncate(tx.counterpart_name || tx.booking_type || '-', 35))}
-                    </div>
-                    <div style="font-size: 0.75rem; color: var(--text-muted)">${escapeHtml(truncate(tx.purpose || '', 50))}</div>
-                </td>
-                <td>
-                    <select class="form-control category-select" data-id="${tx.id}" style="min-width: 150px;">
-                        <option value="">Unkategorisiert</option>
-                        ${generateCategoryOptions(categories, tx.category_id)}
-                    </select>
-                </td>
-                <td class="text-right amount ${tx.amount >= 0 ? 'positive' : 'negative'}">
-                    ${formatCurrency(tx.amount)}
-                </td>
-                <td>
-                    <button class="btn btn-sm btn-icon" onclick="showTransactionDetails(${tx.id})" title="Details">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <line x1="12" y1="16" x2="12" y2="12"></line>
-                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                        </svg>
-                    </button>
-                </td>
-            </tr>
-        `).join('');
+        container.innerHTML = renderTransactionRows(result.items);
+        setupRowHandlers(container);
 
-        // Set up category change handlers
-        container.querySelectorAll('.category-select').forEach(select => {
-            select.addEventListener('change', async (e) => {
-                const id = parseInt(e.target.dataset.id);
-                const categoryId = e.target.value ? parseInt(e.target.value) : 0;
+        // Show count and infinite scroll status
+        updateTransactionStatus(paginationContainer, result);
 
-                try {
-                    await api.updateTransaction(id, { category_id: categoryId });
-                    showToast('Kategorie aktualisiert', 'success');
-                } catch (error) {
-                    showToast('Fehler: ' + error.message, 'error');
-                    loadTransactions();
-                }
-            });
-        });
-
-        // Set up checkbox handlers
-        container.querySelectorAll('.tx-checkbox').forEach(checkbox => {
-            checkbox.addEventListener('change', (e) => {
-                const id = parseInt(e.target.dataset.id);
-                if (e.target.checked) {
-                    selectedTransactions.add(id);
-                } else {
-                    selectedTransactions.delete(id);
-                }
-                updateBulkActions();
-            });
-        });
-
-        // Pagination
-        renderPagination(paginationContainer, result);
+        // Set up scroll listener
+        setupInfiniteScroll();
 
     } catch (error) {
         container.innerHTML = `<tr><td colspan="6" class="text-center">Fehler: ${escapeHtml(error.message)}</td></tr>`;
     }
 }
 
-function renderPagination(container, result) {
-    if (result.pages <= 1) {
-        container.innerHTML = '';
-        return;
+async function loadMoreTransactions() {
+    if (isLoadingMore || !hasMoreTransactions) return;
+
+    isLoadingMore = true;
+    transactionFilters.page += 1;
+
+    const container = document.getElementById('transactions-table');
+    const paginationContainer = document.getElementById('transactions-pagination');
+
+    // Show loading indicator at bottom
+    const loadingRow = document.createElement('tr');
+    loadingRow.id = 'loading-more-row';
+    loadingRow.innerHTML = '<td colspan="6"><div class="loading-overlay" style="padding: 20px 0;"><div class="spinner"></div></div></td></tr>';
+    container.appendChild(loadingRow);
+
+    try {
+        const params = buildTransactionParams();
+        const result = await api.getTransactions(params);
+
+        hasMoreTransactions = result.page < result.pages;
+
+        // Remove loading row
+        const lr = document.getElementById('loading-more-row');
+        if (lr) lr.remove();
+
+        // Append new rows
+        const tempDiv = document.createElement('tbody');
+        tempDiv.innerHTML = renderTransactionRows(result.items);
+        while (tempDiv.firstChild) {
+            container.appendChild(tempDiv.firstChild);
+        }
+
+        // Set up handlers for new rows only
+        setupRowHandlers(container);
+
+        // Update status
+        updateTransactionStatus(paginationContainer, result);
+
+    } catch (error) {
+        const lr = document.getElementById('loading-more-row');
+        if (lr) lr.remove();
+        showToast('Fehler beim Laden: ' + error.message, 'error');
+    } finally {
+        isLoadingMore = false;
     }
-
-    let html = '<div class="pagination">';
-
-    // Previous button
-    html += `<button ${result.page === 1 ? 'disabled' : ''} onclick="changePage(${result.page - 1})">←</button>`;
-
-    // Page numbers
-    const maxVisible = 5;
-    let start = Math.max(1, result.page - Math.floor(maxVisible / 2));
-    let end = Math.min(result.pages, start + maxVisible - 1);
-
-    if (end - start < maxVisible - 1) {
-        start = Math.max(1, end - maxVisible + 1);
-    }
-
-    if (start > 1) {
-        html += `<button onclick="changePage(1)">1</button>`;
-        if (start > 2) html += '<span style="padding: 8px">...</span>';
-    }
-
-    for (let i = start; i <= end; i++) {
-        html += `<button class="${i === result.page ? 'active' : ''}" onclick="changePage(${i})">${i}</button>`;
-    }
-
-    if (end < result.pages) {
-        if (end < result.pages - 1) html += '<span style="padding: 8px">...</span>';
-        html += `<button onclick="changePage(${result.pages})">${result.pages}</button>`;
-    }
-
-    // Next button
-    html += `<button ${result.page === result.pages ? 'disabled' : ''} onclick="changePage(${result.page + 1})">→</button>`;
-
-    html += '</div>';
-    html += `<div class="text-center mt-4" style="color: var(--text-secondary); font-size: 0.875rem;">
-        ${result.total} Transaktionen
-    </div>`;
-
-    container.innerHTML = html;
 }
 
-function changePage(page) {
-    transactionFilters.page = page;
-    loadTransactions();
+function buildTransactionParams() {
+    const params = { ...transactionFilters };
+    if (!params.search) delete params.search;
+    if (!params.start_date) delete params.start_date;
+    if (!params.end_date) delete params.end_date;
+    if (!params.category_id) delete params.category_id;
+    if (!params.amount_type) delete params.amount_type;
+
+    // Add account filter if selected
+    if (selectedAccountId) {
+        params.account_id = selectedAccountId;
+    }
+
+    // Add profile/shared filter
+    if (sharedMode) {
+        params.shared_only = true;
+    } else if (selectedProfileId) {
+        params.profile_id = selectedProfileId;
+    }
+
+    return params;
+}
+
+function renderTransactionRows(items) {
+    return items.map(tx => `
+        <tr data-id="${tx.id}">
+            <td>
+                <input type="checkbox" class="checkbox tx-checkbox" data-id="${tx.id}"
+                    ${selectedTransactions.has(tx.id) ? 'checked' : ''}>
+            </td>
+            <td>${formatDate(tx.booking_date)}</td>
+            <td>
+                <div>
+                    ${tx.is_shared ? '<span class="shared-badge" title="Gemeinsame Ausgabe">G</span>' : ''}
+                    ${escapeHtml(truncate(tx.counterpart_name || tx.booking_type || '-', 35))}
+                </div>
+                <div style="font-size: 0.75rem; color: var(--text-muted)">${escapeHtml(truncate(tx.purpose || '', 50))}</div>
+            </td>
+            <td>
+                <select class="form-control category-select" data-id="${tx.id}" style="min-width: 150px;">
+                    <option value="">Unkategorisiert</option>
+                    ${generateCategoryOptions(categories, tx.category_id)}
+                </select>
+            </td>
+            <td class="text-right amount ${tx.amount >= 0 ? 'positive' : 'negative'}">
+                ${formatCurrency(tx.amount)}
+            </td>
+            <td>
+                <button class="btn btn-sm btn-icon" onclick="showTransactionDetails(${tx.id})" title="Details">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    </svg>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function setupRowHandlers(container) {
+    // Set up category change handlers (use event delegation to avoid duplicates)
+    container.querySelectorAll('.category-select:not([data-bound])').forEach(select => {
+        select.dataset.bound = '1';
+        select.addEventListener('change', async (e) => {
+            const id = parseInt(e.target.dataset.id);
+            const categoryId = e.target.value ? parseInt(e.target.value) : 0;
+
+            try {
+                await api.updateTransaction(id, { category_id: categoryId });
+                showToast('Kategorie aktualisiert', 'success');
+            } catch (error) {
+                showToast('Fehler: ' + error.message, 'error');
+                loadTransactions();
+            }
+        });
+    });
+
+    // Set up checkbox handlers
+    container.querySelectorAll('.tx-checkbox:not([data-bound])').forEach(checkbox => {
+        checkbox.dataset.bound = '1';
+        checkbox.addEventListener('change', (e) => {
+            const id = parseInt(e.target.dataset.id);
+            if (e.target.checked) {
+                selectedTransactions.add(id);
+            } else {
+                selectedTransactions.delete(id);
+            }
+            updateBulkActions();
+        });
+    });
+}
+
+function setupInfiniteScroll() {
+    const tableContainer = document.querySelector('#page-transactions .table-container');
+    if (!tableContainer) return;
+
+    // Remove old listener by replacing with clone
+    const oldListener = tableContainer._scrollHandler;
+    if (oldListener) {
+        tableContainer.removeEventListener('scroll', oldListener);
+    }
+
+    const scrollHandler = () => {
+        if (isLoadingMore || !hasMoreTransactions) return;
+        const { scrollTop, scrollHeight, clientHeight } = tableContainer;
+        // Load more when scrolled within 200px of the bottom
+        if (scrollTop + clientHeight >= scrollHeight - 200) {
+            loadMoreTransactions();
+        }
+    };
+
+    tableContainer._scrollHandler = scrollHandler;
+    tableContainer.addEventListener('scroll', scrollHandler);
+
+    // Also listen on window scroll in case the table container doesn't scroll independently
+    window._txScrollHandler && window.removeEventListener('scroll', window._txScrollHandler);
+    window._txScrollHandler = () => {
+        if (isLoadingMore || !hasMoreTransactions) return;
+        // Check if transactions page is visible
+        const page = document.getElementById('page-transactions');
+        if (!page || page.classList.contains('hidden')) return;
+
+        const { scrollTop, scrollHeight, clientHeight } = document.documentElement;
+        if (scrollTop + clientHeight >= scrollHeight - 200) {
+            loadMoreTransactions();
+        }
+    };
+    window.addEventListener('scroll', window._txScrollHandler);
+}
+
+function updateTransactionStatus(container, result) {
+    const loaded = Math.min(transactionFilters.page * transactionFilters.per_page, totalTransactionCount);
+    container.innerHTML = `
+        <div class="text-center mt-4" style="color: var(--text-secondary); font-size: 0.875rem;">
+            ${loaded} von ${totalTransactionCount} Transaktionen geladen
+            ${hasMoreTransactions ? '' : ' (alle geladen)'}
+        </div>
+    `;
 }
 
 function applyTransactionFilters() {
