@@ -106,9 +106,9 @@ class ApiClient {
     }
 
     async bulkSetShared(transactionIds, isShared = true) {
-        return this.request(`/transactions/bulk-shared?is_shared=${isShared}`, {
+        return this.request('/transactions/bulk-shared', {
             method: 'POST',
-            body: transactionIds
+            body: { transaction_ids: transactionIds, is_shared: isShared }
         });
     }
 
@@ -197,12 +197,11 @@ class ApiClient {
     }
 
     // Import
-    async uploadCSV(file, bankFormat = 'auto', autoCategorize = true, profileId = null) {
+    async uploadCSV(file, bankFormat = 'auto', autoCategorize = true) {
         const formData = new FormData();
         formData.append('file', file);
 
-        let query = `bank_format=${bankFormat}&auto_categorize=${autoCategorize}`;
-        if (profileId) query += `&profile_id=${profileId}`;
+        const query = `bank_format=${bankFormat}&auto_categorize=${autoCategorize}`;
 
         return this.request(`/import?${query}`, {
             method: 'POST',
@@ -219,10 +218,9 @@ class ApiClient {
     }
 
     // Statistics
-    async getDashboardSummary(accountId = null, profileId = null) {
+    async getDashboardSummary(accountId = null) {
         const params = new URLSearchParams();
         if (accountId) params.append('account_id', accountId);
-        if (profileId) params.append('profile_id', profileId);
         const query = params.toString();
         return this.request(`/stats/summary${query ? '?' + query : ''}`);
     }
@@ -243,6 +241,13 @@ class ApiClient {
     }
 
     // Accounts
+    async createAccount(data) {
+        return this.request('/accounts', {
+            method: 'POST',
+            body: data
+        });
+    }
+
     async getAccounts(includeInactive = false) {
         return this.request(`/accounts?include_inactive=${includeInactive}`);
     }
@@ -259,7 +264,6 @@ class ApiClient {
         const params = new URLSearchParams();
         if (data.name !== undefined) params.append('name', data.name);
         if (data.is_active !== undefined) params.append('is_active', data.is_active);
-        if (data.profile_id !== undefined) params.append('profile_id', data.profile_id);
         return this.request(`/accounts/${id}?${params}`, {
             method: 'PATCH'
         });
@@ -329,34 +333,6 @@ class ApiClient {
         });
     }
 
-    // Profiles
-    async getProfiles() {
-        return this.request('/profiles');
-    }
-
-    async getProfile(id) {
-        return this.request(`/profiles/${id}`);
-    }
-
-    async createProfile(data) {
-        return this.request('/profiles', {
-            method: 'POST',
-            body: data
-        });
-    }
-
-    async updateProfile(id, data) {
-        return this.request(`/profiles/${id}`, {
-            method: 'PATCH',
-            body: data
-        });
-    }
-
-    async deleteProfile(id) {
-        return this.request(`/profiles/${id}`, {
-            method: 'DELETE'
-        });
-    }
 }
 
 // Export singleton instance

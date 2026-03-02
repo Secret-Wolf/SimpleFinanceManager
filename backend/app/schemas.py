@@ -152,28 +152,6 @@ class HouseholdInviteResponse(BaseModel):
         from_attributes = True
 
 
-# Profile Schemas
-class ProfileCreate(BaseModel):
-    name: str
-    color: Optional[str] = "#2563eb"
-
-
-class ProfileUpdate(BaseModel):
-    name: Optional[str] = None
-    color: Optional[str] = None
-
-
-class ProfileResponse(BaseModel):
-    id: int
-    name: str
-    color: str
-    is_admin: bool
-    created_at: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
-
-
 # Category Schemas
 class CategoryBase(BaseModel):
     name: str
@@ -218,14 +196,14 @@ class AccountBase(BaseModel):
     account_type: Optional[str] = None
 
 
-class AccountCreate(AccountBase):
-    pass
+class AccountCreate(BaseModel):
+    name: str
+    account_type: Optional[str] = "giro"
 
 
 class Account(AccountBase):
     id: int
     is_active: bool
-    profile_id: Optional[int] = None
     created_at: datetime
 
     class Config:
@@ -246,7 +224,6 @@ class TransactionBase(BaseModel):
     balance_after: Optional[Decimal] = None
     category_id: Optional[int] = None
     notes: Optional[str] = None
-    tags: Optional[str] = None
 
 
 class TransactionCreate(TransactionBase):
@@ -260,12 +237,12 @@ class ManualTransactionCreate(BaseModel):
     description: str  # Beschreibung/Verwendungszweck
     category_id: Optional[int] = None
     notes: Optional[str] = None
+    account_id: Optional[int] = None  # If set, use this account instead of cash
 
 
 class TransactionUpdate(BaseModel):
     category_id: Optional[int] = None
     notes: Optional[str] = None
-    tags: Optional[str] = None
     is_shared: Optional[bool] = None
     shared_household_id: Optional[int] = None
     amount: Optional[Decimal] = None

@@ -13,21 +13,50 @@ from .. import schemas
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
 
-@router.get("", response_model=List[schemas.Account])
-def get_accounts(
-    include_inactive: bool = False,
-    profile_id: Optional[int] = None,
+@router.post("", response_model=schemas.Account)
+def create_account(
+    data: schemas.AccountCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Get all accounts, optionally filtered by profile"""
+    """Create a new manual account"""
+    # Generate pseudo-IBAN for manual accounts
+    max_id = db.query(func.max(Account.id)).scalar() or 0
+    pseudo_iban = f"CUSTOM{current_user.id:06d}{max_id + 1:06d}"
+
+    account = Account(
+        name=data.name,
+        iban=pseudo_iban,
+        bank_name="Manuell",
+        account_type=data.account_type or "giro",
+        user_id=current_user.id,
+    )
+    db.add(account)
+    db.commit()
+    db.refresh(account)
+
+    log_data_event(
+        "create",
+        user_id=current_user.id,
+        resource="account",
+        resource_id=account.id,
+        detail=f"name={account.name} type={account.account_type}",
+    )
+
+    return account
+
+
+@router.get("", response_model=List[schemas.Account])
+def get_accounts(
+    include_inactive: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get all accounts"""
     query = db.query(Account).filter(Account.user_id == current_user.id)
 
     if not include_inactive:
         query = query.filter(Account.is_active == True)
-
-    if profile_id:
-        query = query.filter(Account.profile_id == profile_id)
 
     accounts = query.order_by(Account.name).all()
     return accounts
@@ -35,15 +64,13 @@ def get_accounts(
 
 @router.get("/summary")
 def get_accounts_summary(
-    profile_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Get summary of all active accounts with balances"""
-    query = db.query(Account).filter(Account.is_active == True, Account.user_id == current_user.id)
-    if profile_id:
-        query = query.filter(Account.profile_id == profile_id)
-    accounts = query.all()
+    accounts = db.query(Account).filter(
+        Account.is_active == True, Account.user_id == current_user.id
+    ).all()
 
     result = []
     total_balance = Decimal("0")
@@ -84,7 +111,6 @@ def get_accounts_summary(
             "iban": account.iban,
             "bank_name": account.bank_name,
             "account_type": account.account_type,
-            "profile_id": account.profile_id,
             "balance": balance,
             "transaction_count": tx_count,
             "income_this_month": monthly_stats.income or Decimal("0"),
@@ -131,7 +157,6 @@ def get_account(account_id: int, db: Session = Depends(get_db), current_user: Us
         "bank_name": account.bank_name,
         "account_type": account.account_type,
         "is_active": account.is_active,
-        "profile_id": account.profile_id,
         "created_at": account.created_at,
         "balance": latest_tx.balance_after if latest_tx else None,
         "transaction_count": tx_count,
@@ -145,11 +170,10 @@ def update_account(
     account_id: int,
     name: str = None,
     is_active: bool = None,
-    profile_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Update account (name, active status, profile assignment)"""
+    """Update account (name, active status)"""
     account = db.query(Account).filter(Account.id == account_id, Account.user_id == current_user.id).first()
 
     if not account:
@@ -160,16 +184,6 @@ def update_account(
 
     if is_active is not None:
         account.is_active = is_active
-
-    if profile_id is not None:
-        from ..models import Profile
-        if profile_id == 0:
-            account.profile_id = None
-        else:
-            profile = db.query(Profile).filter(Profile.id == profile_id).first()
-            if not profile:
-                raise HTTPException(status_code=400, detail="Profil nicht gefunden")
-            account.profile_id = profile_id
 
     db.commit()
     db.refresh(account)

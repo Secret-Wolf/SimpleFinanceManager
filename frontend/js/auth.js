@@ -168,6 +168,116 @@ async function handleLogout() {
     showLogin();
 }
 
+// User Profile
+function showUserProfile() {
+    if (!currentUser) return;
+
+    document.getElementById('profile-display-name').value = currentUser.display_name || '';
+    document.getElementById('profile-email').value = currentUser.email || '';
+
+    // Clear password fields
+    document.getElementById('profile-current-password').value = '';
+    document.getElementById('profile-new-password').value = '';
+    document.getElementById('profile-new-password-confirm').value = '';
+
+    // Set dark mode toggle
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    document.getElementById('dark-mode-toggle').checked = isDark;
+
+    openModal('user-profile-modal');
+}
+
+async function saveUserProfile() {
+    const displayName = document.getElementById('profile-display-name').value.trim();
+    const email = document.getElementById('profile-email').value.trim();
+
+    if (!displayName || !email) {
+        showToast('Bitte alle Felder ausfüllen', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/auth/me', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ display_name: displayName, email: email }),
+        });
+
+        if (response.ok) {
+            currentUser = await response.json();
+            const userDisplay = document.getElementById('user-display-name');
+            if (userDisplay) userDisplay.textContent = currentUser.display_name;
+            showToast('Profil aktualisiert', 'success');
+        } else {
+            const error = await response.json().catch(() => ({}));
+            showToast('Fehler: ' + (error.detail || 'Unbekannter Fehler'), 'error');
+        }
+    } catch (error) {
+        showToast('Verbindungsfehler', 'error');
+    }
+}
+
+async function changeUserPassword() {
+    const currentPassword = document.getElementById('profile-current-password').value;
+    const newPassword = document.getElementById('profile-new-password').value;
+    const confirmPassword = document.getElementById('profile-new-password-confirm').value;
+
+    if (!currentPassword || !newPassword) {
+        showToast('Bitte alle Passwortfelder ausfüllen', 'error');
+        return;
+    }
+
+    if (newPassword !== confirmPassword) {
+        showToast('Neue Passwörter stimmen nicht überein', 'error');
+        return;
+    }
+
+    if (newPassword.length < 12) {
+        showToast('Passwort muss mindestens 12 Zeichen lang sein', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/auth/change-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+        });
+
+        if (response.ok) {
+            showToast('Passwort geändert', 'success');
+            document.getElementById('profile-current-password').value = '';
+            document.getElementById('profile-new-password').value = '';
+            document.getElementById('profile-new-password-confirm').value = '';
+        } else {
+            const error = await response.json().catch(() => ({}));
+            let detail = error.detail;
+            if (Array.isArray(detail)) {
+                detail = detail.map(d => d.msg).join('. ');
+            }
+            showToast('Fehler: ' + (detail || 'Unbekannter Fehler'), 'error');
+        }
+    } catch (error) {
+        showToast('Verbindungsfehler', 'error');
+    }
+}
+
+// Dark Mode
+function toggleDarkMode() {
+    const isDark = document.getElementById('dark-mode-toggle').checked;
+    const theme = isDark ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+}
+
+function initTheme() {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+}
+
+// Initialize theme immediately (before DOM ready)
+initTheme();
+
 // Initialize auth on page load
 document.addEventListener('DOMContentLoaded', async () => {
     // Bind form handlers

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_, func
 from typing import Optional, List
@@ -7,6 +8,8 @@ from decimal import Decimal
 import hashlib
 import uuid
 import logging
+import csv
+import io
 
 from ..audit import log_data_event
 from ..database import get_db
@@ -23,7 +26,7 @@ router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 def get_transactions(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
-    sort_by: str = Query("booking_date", pattern="^(booking_date|amount|counterpart_name|category)$"),
+    sort_by: str = Query("booking_date", pattern="^(booking_date|amount|counterpart_name)$"),
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
@@ -31,7 +34,6 @@ def get_transactions(
     include_subcategories: bool = True,
     account_id: Optional[int] = None,
     account_iban: Optional[str] = None,
-    profile_id: Optional[int] = None,
     shared_only: bool = False,
     amount_type: Optional[str] = Query(None, pattern="^(income|expenses|all)$"),
     search: Optional[str] = None,
@@ -76,14 +78,6 @@ def get_transactions(
         query = query.filter(Transaction.account_id == account_id)
     elif account_iban:
         query = query.filter(Transaction.account_iban == account_iban)
-
-    # Profile filter: show transactions from accounts belonging to this profile
-    if profile_id:
-        profile_account_ids = [a.id for a in db.query(Account.id).filter(Account.profile_id == profile_id).all()]
-        if profile_account_ids:
-            query = query.filter(Transaction.account_id.in_(profile_account_ids))
-        else:
-            query = query.filter(Transaction.id == -1)  # No results
 
     if shared_only:
         query = query.filter(Transaction.is_shared == True)
@@ -137,6 +131,78 @@ def get_transactions(
     )
 
 
+@router.get("/export")
+def export_transactions(
+    account_id: Optional[int] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Export transactions as CSV"""
+    user_account_ids = [a.id for a in db.query(Account.id).filter(Account.user_id == current_user.id).all()]
+
+    query = db.query(Transaction).options(
+        joinedload(Transaction.category)
+    ).filter(
+        Transaction.is_split_parent == False,
+        Transaction.account_id.in_(user_account_ids) if user_account_ids else Transaction.id == -1,
+    )
+
+    if account_id:
+        query = query.filter(Transaction.account_id == account_id)
+    if start_date:
+        query = query.filter(Transaction.booking_date >= start_date)
+    if end_date:
+        query = query.filter(Transaction.booking_date <= end_date)
+
+    transactions = query.order_by(Transaction.booking_date.desc(), Transaction.id.desc()).all()
+
+    # Build CSV
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=';', quoting=csv.QUOTE_MINIMAL)
+
+    # Header
+    writer.writerow([
+        'Datum', 'Wertstellung', 'Empfänger/Auftraggeber', 'IBAN', 'BIC',
+        'Buchungsart', 'Verwendungszweck', 'Betrag', 'Währung', 'Saldo danach',
+        'Kategorie', 'Konto', 'Bank', 'Gemeinsam', 'Notizen'
+    ])
+
+    for tx in transactions:
+        cat_name = tx.category.name if tx.category else ''
+        writer.writerow([
+            tx.booking_date.isoformat() if tx.booking_date else '',
+            tx.value_date.isoformat() if tx.value_date else '',
+            tx.counterpart_name or '',
+            tx.counterpart_iban or '',
+            tx.counterpart_bic or '',
+            tx.booking_type or '',
+            tx.purpose or '',
+            str(tx.amount) if tx.amount is not None else '',
+            tx.currency or 'EUR',
+            str(tx.balance_after) if tx.balance_after is not None else '',
+            cat_name,
+            tx.account_name or '',
+            tx.bank_name or '',
+            'Ja' if tx.is_shared else 'Nein',
+            tx.notes or ''
+        ])
+
+    csv_content = output.getvalue()
+    output.close()
+
+    # Use BOM for Excel compatibility
+    bom = '\ufeff'
+    filename = f"transaktionen-export-{date.today().isoformat()}.csv"
+
+    return StreamingResponse(
+        iter([bom + csv_content]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
 @router.get("/{transaction_id}", response_model=schemas.Transaction)
 def get_transaction(transaction_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Get single transaction by ID"""
@@ -186,9 +252,6 @@ def update_transaction(
 
     if update.notes is not None:
         transaction.notes = update.notes
-
-    if update.tags is not None:
-        transaction.tags = update.tags
 
     if update.is_shared is not None:
         transaction.is_shared = update.is_shared
@@ -412,22 +475,31 @@ def create_manual_transaction(
 ):
     """Erstellt eine manuelle Transaktion (Bargeld, Geschenke, etc.)"""
 
-    # Bargeld-Account erstellen oder finden (per User)
-    cash_iban = f"CASH{current_user.id:016d}"
-    cash_account = db.query(Account).filter(
-        Account.iban == cash_iban, Account.user_id == current_user.id
-    ).first()
+    # Determine target account
+    if data.account_id:
+        # Use specified account - verify ownership
+        target_account = db.query(Account).filter(
+            Account.id == data.account_id, Account.user_id == current_user.id
+        ).first()
+        if not target_account:
+            raise HTTPException(status_code=404, detail="Konto nicht gefunden")
+    else:
+        # Fallback: Bargeld-Account erstellen oder finden (per User)
+        cash_iban = f"CASH{current_user.id:016d}"
+        target_account = db.query(Account).filter(
+            Account.iban == cash_iban, Account.user_id == current_user.id
+        ).first()
 
-    if not cash_account:
-        cash_account = Account(
-            name="Bargeld",
-            iban=cash_iban,
-            bank_name="Manuell",
-            account_type="cash",
-            user_id=current_user.id,
-        )
-        db.add(cash_account)
-        db.flush()
+        if not target_account:
+            target_account = Account(
+                name="Bargeld",
+                iban=cash_iban,
+                bank_name="Manuell",
+                account_type="cash",
+                user_id=current_user.id,
+            )
+            db.add(target_account)
+            db.flush()
 
     # Kategorie validieren falls angegeben
     if data.category_id:
@@ -441,10 +513,10 @@ def create_manual_transaction(
     # Transaktion erstellen
     transaction = Transaction(
         import_hash=import_hash,
-        account_id=cash_account.id,
-        account_name=cash_account.name,
-        account_iban=cash_iban,
-        bank_name="Manuell",
+        account_id=target_account.id,
+        account_name=target_account.name,
+        account_iban=target_account.iban,
+        bank_name=target_account.bank_name or "Manuell",
         booking_date=data.booking_date,
         value_date=data.booking_date,
         counterpart_name=data.description,

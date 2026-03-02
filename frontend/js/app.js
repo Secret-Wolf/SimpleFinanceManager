@@ -5,8 +5,6 @@ let currentPage = 'dashboard';
 let categories = [];
 let flatCategories = [];
 let selectedAccountId = null; // null = Alle Konten
-let selectedProfileId = null; // deprecated, kept for compatibility
-let sharedMode = false; // deprecated
 let accounts = [];
 let householdMemberCount = 2; // default, updated from actual household data
 let userHouseholds = []; // list of households the current user is in
@@ -55,9 +53,6 @@ function navigateTo(page) {
         case 'statistics':
             loadStatistics();
             break;
-        case 'profiles':
-            loadProfileManagement();
-            break;
         case 'users':
             loadUserManagement();
             break;
@@ -71,9 +66,6 @@ function navigateTo(page) {
 async function init() {
     // Load categories for global use
     await loadCategoriesData();
-
-    // Load profiles and populate filter dropdown
-    await loadProfilesDropdown();
 
     // Load accounts and populate filter dropdown
     await loadAccountsDropdown();
@@ -156,7 +148,7 @@ async function loadDashboard() {
     container.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
 
     try {
-        const summary = await api.getDashboardSummary(selectedAccountId, selectedProfileId);
+        const summary = await api.getDashboardSummary(selectedAccountId);
 
         const incomeChange = percentChange(summary.income_current_month, summary.income_previous_month);
         const expenseChange = percentChange(summary.expenses_current_month, summary.expenses_previous_month);
@@ -280,7 +272,7 @@ function updateNavBadge(count) {
 
 async function refreshNavBadge() {
     try {
-        const summary = await api.getDashboardSummary(selectedAccountId, selectedProfileId);
+        const summary = await api.getDashboardSummary(selectedAccountId);
         updateNavBadge(summary.uncategorized_count);
     } catch (e) {
         // Silently fail

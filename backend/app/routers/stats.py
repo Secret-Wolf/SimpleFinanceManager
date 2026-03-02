@@ -88,7 +88,6 @@ def find_last_salary_date(db: Session, user_account_ids: List[int]) -> Optional[
 @router.get("/summary", response_model=schemas.DashboardSummary)
 def get_summary(
     account_id: Optional[int] = None,
-    profile_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -99,7 +98,7 @@ def get_summary(
         _verify_account_ownership(account_id, current_user, db)
 
     return get_dashboard_summary(
-        db, account_id=account_id, profile_id=profile_id,
+        db, account_id=account_id,
         user_account_ids=user_account_ids
     )
 
@@ -110,7 +109,6 @@ def get_by_category(
     end_date: Optional[date] = None,
     period: str = Query("month", pattern="^(week|month|last_month|quarter|year|since_salary|custom)$"),
     account_id: Optional[int] = None,
-    profile_id: Optional[int] = None,
     shared_only: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -157,8 +155,9 @@ def get_by_category(
 
     return get_stats_by_category(
         db, start_date, end_date,
-        account_id=account_id, profile_id=profile_id,
-        shared_only=shared_only, user_account_ids=user_account_ids
+        account_id=account_id,
+        shared_only=shared_only, user_account_ids=user_account_ids,
+        user_id=current_user.id
     )
 
 
@@ -169,7 +168,6 @@ def get_over_time(
     period: str = Query("year", pattern="^(month|last_month|quarter|year|since_salary|custom)$"),
     group_by: str = Query("month", pattern="^(day|week|month)$"),
     account_id: Optional[int] = None,
-    profile_id: Optional[int] = None,
     shared_only: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -231,7 +229,7 @@ def get_over_time(
 
     return get_stats_over_time(
         db, start_date, end_date, group_by,
-        account_id=account_id, profile_id=profile_id,
+        account_id=account_id,
         shared_only=shared_only, user_account_ids=user_account_ids
     )
 

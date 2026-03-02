@@ -158,7 +158,7 @@ async function saveCategory() {
 
         closeModal('category-modal');
         loadCategories();
-        initTransactionFilters();
+        updateCategoryDropdowns();
 
     } catch (error) {
         showToast('Fehler: ' + error.message, 'error');
@@ -196,7 +196,7 @@ async function deleteCategory(id) {
         await api.deleteCategory(id);
         showToast('Kategorie gelöscht', 'success');
         loadCategories();
-        initTransactionFilters();
+        updateCategoryDropdowns();
     } catch (error) {
         showToast('Fehler: ' + error.message, 'error');
     }
@@ -211,7 +211,7 @@ async function confirmDeleteCategory() {
         showToast('Kategorie gelöscht', 'success');
         closeModal('delete-category-modal');
         loadCategories();
-        initTransactionFilters();
+        updateCategoryDropdowns();
     } catch (error) {
         showToast('Fehler: ' + error.message, 'error');
     }
@@ -222,7 +222,7 @@ async function initDefaultCategories() {
         await api.initDefaultCategories();
         showToast('Standardkategorien erstellt', 'success');
         loadCategories();
-        initTransactionFilters();
+        updateCategoryDropdowns();
     } catch (error) {
         showToast('Fehler: ' + error.message, 'error');
     }

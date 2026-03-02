@@ -121,17 +121,28 @@ async function showAccountDetail(accountId) {
     }
 }
 
-// API extensions
-if (typeof api !== 'undefined') {
-    api.getAccountsSummary = async function() {
-        return this.request('/accounts/summary');
-    };
+function showCreateAccountModal() {
+    document.getElementById('create-account-name').value = '';
+    document.getElementById('create-account-type').value = 'giro';
+    openModal('create-account-modal');
+}
 
-    api.getAccounts = async function() {
-        return this.request('/accounts');
-    };
+async function saveNewAccount() {
+    const name = document.getElementById('create-account-name').value.trim();
+    const accountType = document.getElementById('create-account-type').value;
 
-    api.getAccount = async function(id) {
-        return this.request(`/accounts/${id}`);
-    };
+    if (!name) {
+        showToast('Bitte Kontoname eingeben', 'error');
+        return;
+    }
+
+    try {
+        await api.createAccount({ name, account_type: accountType });
+        showToast('Konto erstellt', 'success');
+        closeModal('create-account-modal');
+        loadAccounts();
+        await loadAccountsDropdown();
+    } catch (error) {
+        showToast('Fehler: ' + error.message, 'error');
+    }
 }

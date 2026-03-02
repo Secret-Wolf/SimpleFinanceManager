@@ -62,8 +62,6 @@
             <div class="sidebar-header">
                 <h1>Finanzmanager</h1>
             </div>
-            <!-- Profile Selector (deprecated, hidden) -->
-            <div class="profile-selector" style="display: none;"></div>
             <!-- Account Selector -->
             <div class="account-selector">
                 <label>Konto</label>
@@ -147,14 +145,12 @@
             </nav>
             <div class="sidebar-footer">
                 <div class="user-info">
-                    <span id="user-display-name" class="user-name"></span>
-                    <button class="btn btn-sm btn-secondary" onclick="handleLogout()" title="Abmelden">
+                    <span id="user-display-name" class="user-name" onclick="showUserProfile()" style="cursor: pointer;" title="Profil bearbeiten"></span>
+                    <button class="btn btn-sm btn-icon" onclick="showUserProfile()" title="Profil">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                            <polyline points="16 17 21 12 16 7"></polyline>
-                            <line x1="21" y1="12" x2="9" y2="12"></line>
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="12" cy="7" r="4"></circle>
                         </svg>
-                        Abmelden
                     </button>
                 </div>
             </div>
@@ -427,9 +423,12 @@
 
             <!-- Accounts Page -->
             <div id="page-accounts" class="page hidden">
-                <div class="page-header">
-                    <h2>Konten</h2>
-                    <p>Übersicht aller verbundenen Bankkonten</p>
+                <div class="page-header flex justify-between items-center">
+                    <div>
+                        <h2>Konten</h2>
+                        <p>Übersicht aller verbundenen Bankkonten</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="showCreateAccountModal()">+ Konto erstellen</button>
                 </div>
 
                 <!-- Total Balance Card -->
@@ -449,9 +448,6 @@
                     <div class="loading-overlay"><div class="spinner"></div></div>
                 </div>
             </div>
-
-            <!-- Profiles Page (legacy, hidden) -->
-            <div id="page-profiles" class="page hidden"></div>
 
             <!-- Households Page -->
             <div id="page-households" class="page hidden">
@@ -903,6 +899,13 @@
                     </div>
 
                     <div class="form-group">
+                        <label>Konto</label>
+                        <select id="manual-account" class="form-control">
+                            <option value="">Bargeld (Standard)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
                         <label>Kategorie (optional)</label>
                         <select id="manual-category" class="form-control">
                             <option value="">Keine Kategorie</option>
@@ -922,12 +925,12 @@
         </div>
     </div>
 
-    <!-- Profile Modal -->
-    <div id="profile-modal" class="modal-overlay">
-        <div class="modal">
+    <!-- User Profile Modal -->
+    <div id="user-profile-modal" class="modal-overlay">
+        <div class="modal" style="max-width: 480px;">
             <div class="modal-header">
-                <h3 id="profile-modal-title">Neues Profil</h3>
-                <button class="modal-close" onclick="closeModal('profile-modal')">
+                <h3>Mein Profil</h3>
+                <button class="modal-close" onclick="closeModal('user-profile-modal')">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -935,19 +938,128 @@
                 </button>
             </div>
             <div class="modal-body">
-                <input type="hidden" id="profile-id">
+                <!-- Profile Info -->
                 <div class="form-group">
-                    <label>Name</label>
-                    <input type="text" id="profile-name" class="form-control" placeholder="z.B. Sabrina" required>
+                    <label>Anzeigename</label>
+                    <input type="text" id="profile-display-name" class="form-control">
                 </div>
                 <div class="form-group">
-                    <label>Farbe</label>
-                    <input type="color" id="profile-color" class="form-control" value="#2563eb" style="height: 40px; padding: 4px;">
+                    <label>E-Mail</label>
+                    <input type="email" id="profile-email" class="form-control">
+                </div>
+                <div class="modal-footer" style="padding: 0 0 16px 0; border: none;">
+                    <button class="btn btn-primary" onclick="saveUserProfile()">Profil speichern</button>
+                </div>
+
+                <hr style="border-color: var(--border-color); margin: 8px 0 16px;">
+
+                <!-- Dark Mode -->
+                <div class="form-group" style="display: flex; align-items: center; justify-content: space-between;">
+                    <label style="margin: 0;">Dark Mode</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="dark-mode-toggle" onchange="toggleDarkMode()">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+
+                <hr style="border-color: var(--border-color); margin: 8px 0 16px;">
+
+                <!-- Password Change -->
+                <h4 style="margin-bottom: 12px; color: var(--text-secondary);">Passwort ändern</h4>
+                <div class="form-group">
+                    <label>Aktuelles Passwort</label>
+                    <input type="password" id="profile-current-password" class="form-control" autocomplete="current-password">
+                </div>
+                <div class="form-group">
+                    <label>Neues Passwort</label>
+                    <input type="password" id="profile-new-password" class="form-control" autocomplete="new-password" minlength="12">
+                    <small style="color: var(--text-secondary);">Min. 12 Zeichen, Gross-/Kleinbuchstaben + Zahl</small>
+                </div>
+                <div class="form-group">
+                    <label>Neues Passwort wiederholen</label>
+                    <input type="password" id="profile-new-password-confirm" class="form-control" autocomplete="new-password">
+                </div>
+                <div class="modal-footer" style="padding: 0 0 16px 0; border: none;">
+                    <button class="btn btn-primary" onclick="changeUserPassword()">Passwort ändern</button>
+                </div>
+
+                <hr style="border-color: var(--border-color); margin: 8px 0 16px;">
+
+                <!-- Export -->
+                <h4 style="margin-bottom: 12px; color: var(--text-secondary);">Daten exportieren</h4>
+                <div class="form-group">
+                    <label>Konto</label>
+                    <select id="export-account" class="form-control">
+                        <option value="">Alle Konten</option>
+                    </select>
+                </div>
+                <div class="flex gap-4">
+                    <div class="form-group" style="flex: 1;">
+                        <label>Von</label>
+                        <input type="date" id="export-start-date" class="form-control">
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label>Bis</label>
+                        <input type="date" id="export-end-date" class="form-control">
+                    </div>
+                </div>
+                <div class="modal-footer" style="padding: 0 0 16px 0; border: none;">
+                    <button class="btn btn-primary" onclick="exportTransactions()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 6px;">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        CSV herunterladen
+                    </button>
+                </div>
+
+                <hr style="border-color: var(--border-color); margin: 8px 0 16px;">
+
+                <!-- Logout -->
+                <button class="btn btn-secondary" onclick="handleLogout()" style="width: 100%;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 6px;">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                        <polyline points="16 17 21 12 16 7"></polyline>
+                        <line x1="21" y1="12" x2="9" y2="12"></line>
+                    </svg>
+                    Abmelden
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Account Modal -->
+    <div id="create-account-modal" class="modal-overlay">
+        <div class="modal" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3>Konto erstellen</h3>
+                <button class="modal-close" onclick="closeModal('create-account-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Kontoname</label>
+                    <input type="text" id="create-account-name" class="form-control" placeholder="z.B. Haushaltskasse" required>
+                </div>
+                <div class="form-group">
+                    <label>Kontotyp</label>
+                    <select id="create-account-type" class="form-control">
+                        <option value="giro">Girokonto</option>
+                        <option value="savings">Sparkonto</option>
+                        <option value="cash">Bargeld</option>
+                        <option value="credit">Kreditkarte</option>
+                        <option value="depot">Depot</option>
+                    </select>
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeModal('profile-modal')">Abbrechen</button>
-                <button class="btn btn-primary" onclick="saveProfile()">Speichern</button>
+                <button class="btn btn-secondary" onclick="closeModal('create-account-modal')">Abbrechen</button>
+                <button class="btn btn-primary" onclick="saveNewAccount()">Erstellen</button>
             </div>
         </div>
     </div>
@@ -1054,7 +1166,6 @@
     <script src="/static/js/import.js"></script>
     <script src="/static/js/statistics.js"></script>
     <script src="/static/js/accounts.js"></script>
-    <script src="/static/js/profiles.js"></script>
     <script src="/static/js/users.js"></script>
     <script src="/static/js/households.js"></script>
     <script src="/static/js/app.js"></script>

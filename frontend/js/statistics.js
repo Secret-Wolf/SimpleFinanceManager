@@ -68,10 +68,6 @@ async function loadCategoryStats() {
         if (selectedAccountId) {
             params.account_id = selectedAccountId;
         }
-        // Legacy profile filter (deprecated)
-        if (selectedProfileId) {
-            params.profile_id = selectedProfileId;
-        }
         const stats = await api.getStatsByCategory(params);
 
         // Render chart
@@ -140,10 +136,6 @@ async function loadTimeStats() {
         // Add account filter if selected
         if (selectedAccountId) {
             params.account_id = selectedAccountId;
-        }
-        // Legacy profile filter (deprecated)
-        if (selectedProfileId) {
-            params.profile_id = selectedProfileId;
         }
         const stats = await api.getStatsOverTime(params);
         renderTimeChart(stats.data);
@@ -330,10 +322,6 @@ async function exportStats() {
         // Add account filter if selected
         if (selectedAccountId) {
             params.account_id = selectedAccountId;
-        }
-        // Legacy profile filter (deprecated)
-        if (selectedProfileId) {
-            params.profile_id = selectedProfileId;
         }
         const stats = await api.getStatsByCategory(params);
 

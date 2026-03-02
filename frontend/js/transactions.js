@@ -130,13 +130,6 @@ function buildTransactionParams() {
         params.account_id = selectedAccountId;
     }
 
-    // Add profile/shared filter
-    if (sharedMode) {
-        params.shared_only = true;
-    } else if (selectedProfileId) {
-        params.profile_id = selectedProfileId;
-    }
-
     return params;
 }
 
@@ -447,6 +440,7 @@ async function saveTransactionDetails() {
             shared_household_id: sharedHouseholdId
         });
         showToast('Gespeichert', 'success');
+        closeModal('transaction-detail-modal');
         loadTransactions();
     } catch (error) {
         showToast('Fehler: ' + error.message, 'error');
@@ -598,6 +592,12 @@ function showManualEntryModal() {
         ${generateCategoryOptions(categories)}
     `;
 
+    // Populate account select
+    document.getElementById('manual-account').innerHTML = `
+        <option value="">Bargeld (Standard)</option>
+        ${accounts.map(acc => `<option value="${acc.id}">${escapeHtml(acc.name)}${acc.bank_name ? ' (' + escapeHtml(acc.bank_name) + ')' : ''}</option>`).join('')}
+    `;
+
     openModal('manual-entry-modal');
 }
 
@@ -649,12 +649,15 @@ async function saveManualEntry() {
     // Amount: positive for income, negative for expense
     const amount = isIncome ? amountInput : -amountInput;
 
+    const accountId = document.getElementById('manual-account').value;
+
     const data = {
         booking_date: bookingDate,
         amount: amount,
         description: description,
         category_id: categoryId ? parseInt(categoryId) : null,
-        notes: notes || null
+        notes: notes || null,
+        account_id: accountId ? parseInt(accountId) : null
     };
 
     try {

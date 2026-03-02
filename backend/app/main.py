@@ -10,7 +10,7 @@ import os
 from .config import settings
 from .database import init_db
 from .migrations import run_migrations
-from .routers import transactions, categories, rules, imports, stats, accounts, profiles, auth, households
+from .routers import transactions, categories, rules, imports, stats, accounts, auth, households
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address, default_limits=[f"{settings.RATE_LIMIT_PER_MINUTE}/minute"])
@@ -78,7 +78,6 @@ app.include_router(rules.router)
 app.include_router(imports.router)
 app.include_router(stats.router)
 app.include_router(accounts.router)
-app.include_router(profiles.router)
 app.include_router(households.router)
 
 
