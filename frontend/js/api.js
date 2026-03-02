@@ -40,7 +40,11 @@ class ApiClient {
 
             if (!response.ok) {
                 const error = await response.json().catch(() => ({}));
-                throw new Error(error.detail || `HTTP ${response.status}`);
+                let detail = error.detail;
+                if (Array.isArray(detail)) {
+                    detail = detail.map(e => e.msg).join('; ');
+                }
+                throw new Error(detail || `HTTP ${response.status}`);
             }
 
             return await response.json();
@@ -180,8 +184,8 @@ class ApiClient {
         });
     }
 
-    async applyRules() {
-        return this.request('/rules/apply', {
+    async applyRules(overwrite = false) {
+        return this.request(`/rules/apply?overwrite=${overwrite}`, {
             method: 'POST'
         });
     }

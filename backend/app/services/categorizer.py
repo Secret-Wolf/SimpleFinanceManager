@@ -147,6 +147,27 @@ def apply_rules_to_uncategorized(db: Session) -> int:
     return categorized_count
 
 
+def apply_rules_to_all(db: Session) -> int:
+    """Apply rules to ALL transactions, overwriting existing categories. Returns count."""
+
+    transactions = db.query(Transaction).filter(
+        Transaction.is_split_parent == False
+    ).all()
+
+    categorized_count = 0
+
+    for transaction in transactions:
+        result = categorize_transaction(db, transaction)
+        if result:
+            transaction.category_id = result["category_id"]
+            if result["assign_shared"]:
+                transaction.is_shared = True
+            categorized_count += 1
+
+    db.commit()
+    return categorized_count
+
+
 def create_rule_from_transaction(
     db: Session,
     transaction: Transaction,

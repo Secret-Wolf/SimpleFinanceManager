@@ -299,12 +299,19 @@
                         <p>Automatische Kategorisierung einrichten</p>
                     </div>
                     <div class="flex gap-2">
-                        <button class="btn btn-secondary" onclick="applyAllRules()">
+                        <button class="btn btn-secondary" onclick="applyAllRules(false)" title="Nur unkategorisierte Transaktionen kategorisieren">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polyline points="23 4 23 10 17 10"></polyline>
                                 <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
                             </svg>
                             Regeln anwenden
+                        </button>
+                        <button class="btn btn-secondary" onclick="applyAllRules(true)" title="Alle Transaktionen neu kategorisieren (überschreibt bestehende Kategorien)">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                                <path d="M3 3v5h5"></path>
+                            </svg>
+                            Alle neu kategorisieren
                         </button>
                         <button class="btn btn-primary" onclick="showAddRuleModal()">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -555,24 +562,24 @@
                 </button>
             </div>
             <div class="modal-body">
-                <div style="display: grid; grid-template-columns: auto 1fr; gap: 12px 20px;">
+                <div style="display: grid; grid-template-columns: auto 1fr; gap: 12px 20px; align-items: center;">
                     <div style="color: var(--text-secondary);">Datum:</div>
-                    <div id="detail-date">-</div>
+                    <input type="date" id="detail-date" class="form-control" style="max-width: 200px;">
 
                     <div style="color: var(--text-secondary);">Empfänger:</div>
-                    <div id="detail-counterpart">-</div>
+                    <input type="text" id="detail-counterpart" class="form-control" placeholder="Empfänger">
 
                     <div style="color: var(--text-secondary);">IBAN:</div>
-                    <div id="detail-iban" style="font-family: monospace; font-size: 0.875rem;">-</div>
+                    <div id="detail-iban" style="font-family: monospace; font-size: 0.875rem; color: var(--text-secondary);">-</div>
 
                     <div style="color: var(--text-secondary);">Buchungsart:</div>
-                    <div id="detail-type">-</div>
+                    <div id="detail-type" style="color: var(--text-secondary);">-</div>
 
                     <div style="color: var(--text-secondary);">Verwendungszweck:</div>
-                    <div id="detail-purpose" style="word-break: break-word;">-</div>
+                    <input type="text" id="detail-purpose" class="form-control" placeholder="Verwendungszweck">
 
                     <div style="color: var(--text-secondary);">Betrag:</div>
-                    <div id="detail-amount" class="amount">-</div>
+                    <input type="number" id="detail-amount" class="form-control" step="0.01" style="max-width: 160px;">
                 </div>
 
                 <div class="form-group mt-4">
@@ -585,10 +592,13 @@
                     <span>Gemeinsame Ausgabe</span>
                 </label>
             </div>
-            <div class="modal-footer">
-                <button id="split-btn" class="btn btn-secondary">Aufteilen</button>
-                <button id="create-rule-btn" class="btn btn-secondary">Regel erstellen</button>
-                <button class="btn btn-primary" onclick="saveTransactionDetails(); closeModal('transaction-detail-modal')">Speichern</button>
+            <div class="modal-footer" style="justify-content: space-between;">
+                <button id="delete-transaction-btn" class="btn btn-danger" onclick="deleteCurrentTransaction()">Löschen</button>
+                <div class="flex gap-2">
+                    <button id="split-btn" class="btn btn-secondary">Aufteilen</button>
+                    <button id="create-rule-btn" class="btn btn-secondary">Regel erstellen</button>
+                    <button class="btn btn-primary" onclick="saveTransactionDetails(); closeModal('transaction-detail-modal')">Speichern</button>
+                </div>
             </div>
         </div>
     </div>

@@ -244,12 +244,15 @@ async function deleteRule(id) {
     }
 }
 
-async function applyAllRules() {
+async function applyAllRules(overwrite = false) {
+    if (overwrite) {
+        if (!confirm('Alle Transaktionen neu kategorisieren? Bereits zugewiesene Kategorien werden überschrieben.')) return;
+    }
+
     try {
-        const result = await api.applyRules();
+        const result = await api.applyRules(overwrite);
         showToast(result.message, 'success');
 
-        // Refresh dashboard if visible
         if (currentPage === 'dashboard') {
             loadDashboard();
         }

@@ -267,6 +267,10 @@ class TransactionUpdate(BaseModel):
     notes: Optional[str] = None
     tags: Optional[str] = None
     is_shared: Optional[bool] = None
+    amount: Optional[Decimal] = None
+    counterpart_name: Optional[str] = None
+    purpose: Optional[str] = None
+    booking_date: Optional[date] = None
 
 
 class BulkSharedRequest(BaseModel):

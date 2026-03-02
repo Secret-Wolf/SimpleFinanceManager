@@ -8,6 +8,7 @@ let selectedAccountId = null; // null = Alle Konten
 let selectedProfileId = null; // deprecated, kept for compatibility
 let sharedMode = false; // deprecated
 let accounts = [];
+let householdMemberCount = 2; // default, updated from actual household data
 
 // Navigation
 function navigateTo(page) {
@@ -75,6 +76,9 @@ async function init() {
 
     // Load accounts and populate filter dropdown
     await loadAccountsDropdown();
+
+    // Load household member count for shared expense calculation
+    await loadHouseholdMemberCount();
 
     // Set up navigation
     document.querySelectorAll('.nav-item').forEach(item => {
@@ -184,7 +188,7 @@ async function loadDashboard() {
                 <div class="stat-card shared-card">
                     <div class="label">Gemeinsame Ausgaben (Monat)</div>
                     <div class="value negative">${formatCurrency(sharedExpenses)}</div>
-                    <div class="change" style="color: var(--text-secondary)">Pro Person: ~${formatCurrency(sharedExpenses / 2)}</div>
+                    <div class="change" style="color: var(--text-secondary)">Pro Person: ~${formatCurrency(sharedExpenses / householdMemberCount)} (${householdMemberCount} Personen)</div>
                 </div>
                 ` : ''}
             </div>
@@ -350,6 +354,23 @@ function updateAccountHeader() {
 // Helper to get current account ID for API calls
 function getSelectedAccountId() {
     return selectedAccountId;
+}
+
+// Load household member count for shared expense per-person calculation
+async function loadHouseholdMemberCount() {
+    try {
+        const households = await api.getHouseholds();
+        if (households && households.length > 0) {
+            // Use the first household's member count
+            const household = households[0];
+            const memberCount = household.members ? household.members.length : null;
+            if (memberCount && memberCount > 1) {
+                householdMemberCount = memberCount;
+            }
+        }
+    } catch (e) {
+        // Silently fail - keep default of 2
+    }
 }
 
 // Note: init() is called by auth.js after successful authentication

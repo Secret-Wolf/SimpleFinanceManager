@@ -5,7 +5,7 @@ from typing import List
 from ..database import get_db
 from ..auth import get_current_user
 from ..models import CategorizationRule, Category, Transaction, User
-from ..services.categorizer import apply_rules_to_uncategorized, create_rule_from_transaction
+from ..services.categorizer import apply_rules_to_uncategorized, apply_rules_to_all, create_rule_from_transaction
 from .. import schemas
 
 router = APIRouter(prefix="/api/rules", tags=["rules"])
@@ -176,9 +176,17 @@ def delete_rule(rule_id: int, db: Session = Depends(get_db), current_user: User 
 
 
 @router.post("/apply")
-def apply_rules(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Apply all rules to uncategorized transactions"""
-    count = apply_rules_to_uncategorized(db)
+def apply_rules(
+    overwrite: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Apply all rules to transactions.
+    If overwrite=True, re-categorizes already categorized transactions too."""
+    if overwrite:
+        count = apply_rules_to_all(db)
+    else:
+        count = apply_rules_to_uncategorized(db)
 
     return {
         "message": f"{count} Transaktionen kategorisiert",

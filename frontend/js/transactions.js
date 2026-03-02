@@ -352,17 +352,22 @@ function selectAllTransactions() {
     updateBulkActions();
 }
 
+let currentTransactionId = null;
+
 async function showTransactionDetails(id) {
     try {
         const tx = await api.getTransaction(id);
+        currentTransactionId = tx.id;
 
-        document.getElementById('detail-date').textContent = formatDate(tx.booking_date);
-        document.getElementById('detail-counterpart').textContent = tx.counterpart_name || '-';
+        // Editable fields
+        document.getElementById('detail-date').value = tx.booking_date;
+        document.getElementById('detail-counterpart').value = tx.counterpart_name || '';
+        document.getElementById('detail-purpose').value = tx.purpose || '';
+        document.getElementById('detail-amount').value = tx.amount;
+
+        // Read-only fields
         document.getElementById('detail-iban').textContent = tx.counterpart_iban || '-';
         document.getElementById('detail-type').textContent = tx.booking_type || '-';
-        document.getElementById('detail-purpose').textContent = tx.purpose || '-';
-        document.getElementById('detail-amount').textContent = formatCurrency(tx.amount);
-        document.getElementById('detail-amount').className = `amount ${tx.amount >= 0 ? 'positive' : 'negative'}`;
 
         // Notes
         const notesInput = document.getElementById('detail-notes');
@@ -394,11 +399,33 @@ async function showTransactionDetails(id) {
 async function saveTransactionDetails() {
     const notesInput = document.getElementById('detail-notes');
     const id = parseInt(notesInput.dataset.id);
+
+    const bookingDate = document.getElementById('detail-date').value;
+    const counterpartName = document.getElementById('detail-counterpart').value.trim();
+    const purpose = document.getElementById('detail-purpose').value.trim();
+    const amount = parseFloat(document.getElementById('detail-amount').value);
     const notes = notesInput.value;
     const isShared = document.getElementById('detail-shared').checked;
 
+    if (!bookingDate) {
+        showToast('Datum darf nicht leer sein', 'error');
+        return;
+    }
+
+    if (isNaN(amount)) {
+        showToast('Ungültiger Betrag', 'error');
+        return;
+    }
+
     try {
-        await api.updateTransaction(id, { notes, is_shared: isShared });
+        await api.updateTransaction(id, {
+            booking_date: bookingDate,
+            counterpart_name: counterpartName || null,
+            purpose: purpose || null,
+            amount,
+            notes,
+            is_shared: isShared
+        });
         showToast('Gespeichert', 'success');
         loadTransactions();
     } catch (error) {
@@ -552,6 +579,22 @@ function showManualEntryModal() {
     `;
 
     openModal('manual-entry-modal');
+}
+
+async function deleteCurrentTransaction() {
+    if (!currentTransactionId) return;
+
+    if (!confirm('Transaktion wirklich löschen?')) return;
+
+    try {
+        await api.deleteTransaction(currentTransactionId);
+        showToast('Transaktion gelöscht', 'success');
+        closeModal('transaction-detail-modal');
+        currentTransactionId = null;
+        loadTransactions();
+    } catch (error) {
+        showToast('Fehler: ' + error.message, 'error');
+    }
 }
 
 async function saveManualEntry() {

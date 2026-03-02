@@ -193,6 +193,19 @@ def update_transaction(
     if update.is_shared is not None:
         transaction.is_shared = update.is_shared
 
+    if update.amount is not None:
+        transaction.amount = update.amount
+
+    if update.counterpart_name is not None:
+        transaction.counterpart_name = update.counterpart_name
+
+    if update.purpose is not None:
+        transaction.purpose = update.purpose
+
+    if update.booking_date is not None:
+        transaction.booking_date = update.booking_date
+        transaction.value_date = update.booking_date
+
     db.commit()
     db.refresh(transaction)
 
