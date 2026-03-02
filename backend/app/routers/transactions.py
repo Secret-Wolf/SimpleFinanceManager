@@ -192,6 +192,11 @@ def update_transaction(
 
     if update.is_shared is not None:
         transaction.is_shared = update.is_shared
+        if not update.is_shared:
+            transaction.shared_household_id = None
+
+    if update.shared_household_id is not None:
+        transaction.shared_household_id = update.shared_household_id if update.shared_household_id != 0 else None
 
     if update.amount is not None:
         transaction.amount = update.amount

@@ -257,4 +257,15 @@ def run_migrations():
             conn.commit()
             logger.info("Migration: household_invites table created")
 
+        # Migration 14: Add shared_household_id to transactions
+        if 'transactions' in inspector.get_table_names():
+            columns = [col['name'] for col in inspector.get_columns('transactions')]
+            if 'shared_household_id' not in columns:
+                logger.info("Migration: Adding shared_household_id to transactions")
+                conn.execute(text("""
+                    ALTER TABLE transactions ADD COLUMN shared_household_id INTEGER REFERENCES households(id)
+                """))
+                conn.commit()
+                logger.info("Migration: shared_household_id added to transactions")
+
         logger.info("All migrations completed")

@@ -267,6 +267,7 @@ class TransactionUpdate(BaseModel):
     notes: Optional[str] = None
     tags: Optional[str] = None
     is_shared: Optional[bool] = None
+    shared_household_id: Optional[int] = None
     amount: Optional[Decimal] = None
     counterpart_name: Optional[str] = None
     purpose: Optional[str] = None
@@ -287,6 +288,7 @@ class Transaction(TransactionBase):
     bank_name: Optional[str] = None
     is_split_parent: bool = False
     is_shared: bool = False
+    shared_household_id: Optional[int] = None
     parent_transaction_id: Optional[int] = None
     original_category: Optional[str] = None
     creditor_id: Optional[str] = None

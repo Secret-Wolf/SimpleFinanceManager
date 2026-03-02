@@ -9,6 +9,7 @@ let selectedProfileId = null; // deprecated, kept for compatibility
 let sharedMode = false; // deprecated
 let accounts = [];
 let householdMemberCount = 2; // default, updated from actual household data
+let userHouseholds = []; // list of households the current user is in
 
 // Navigation
 function navigateTo(page) {
@@ -361,7 +362,8 @@ async function loadHouseholdMemberCount() {
     try {
         const households = await api.getHouseholds();
         if (households && households.length > 0) {
-            // Use the first household's member count
+            userHouseholds = households;
+            // Use the first household's member count as default
             const household = households[0];
             const memberCount = household.members ? household.members.length : null;
             if (memberCount && memberCount > 1) {
@@ -369,7 +371,7 @@ async function loadHouseholdMemberCount() {
             }
         }
     } catch (e) {
-        // Silently fail - keep default of 2
+        // Silently fail - keep defaults
     }
 }
 

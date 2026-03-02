@@ -109,8 +109,9 @@ class Transaction(Base):
     parent_transaction_id = Column(Integer, ForeignKey("transactions.id"))
     is_split_parent = Column(Boolean, default=False)
 
-    # Gemeinsame Ausgabe
+    # Gemeinsame Buchung
     is_shared = Column(Boolean, default=False)
+    shared_household_id = Column(Integer, ForeignKey("households.id"), nullable=True)
 
     # Benutzerdaten
     notes = Column(Text)
@@ -130,6 +131,7 @@ class Transaction(Base):
     category = relationship("Category", back_populates="transactions")
     parent_transaction = relationship("Transaction", remote_side=[id], back_populates="split_children")
     split_children = relationship("Transaction", back_populates="parent_transaction")
+    shared_household = relationship("Household", foreign_keys=[shared_household_id])
 
 
 class CategorizationRule(Base):

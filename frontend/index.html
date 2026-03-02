@@ -588,9 +588,15 @@
                 </div>
 
                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 12px;">
-                    <input type="checkbox" id="detail-shared">
-                    <span>Gemeinsame Ausgabe</span>
+                    <input type="checkbox" id="detail-shared" onchange="onSharedCheckboxChange()">
+                    <span>Gemeinsame Buchung</span>
                 </label>
+                <div id="detail-household-row" style="margin-top: 10px; display: none;">
+                    <label style="font-size: 0.875rem; color: var(--text-secondary); display: block; margin-bottom: 4px;">Haushalt</label>
+                    <select id="detail-household" class="form-control">
+                        <option value="">Kein Haushalt zugewiesen</option>
+                    </select>
+                </div>
             </div>
             <div class="modal-footer" style="justify-content: space-between;">
                 <button id="delete-transaction-btn" class="btn btn-danger" onclick="deleteCurrentTransaction()">Löschen</button>
@@ -842,7 +848,7 @@
 
                     <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 12px;">
                         <input type="checkbox" id="rule-assign-shared">
-                        <span>Automatisch als gemeinsame Ausgabe markieren</span>
+                        <span>Automatisch als gemeinsame Buchung markieren</span>
                     </label>
                 </form>
             </div>

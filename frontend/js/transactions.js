@@ -150,7 +150,13 @@ function renderTransactionRows(items) {
             <td>${formatDate(tx.booking_date)}</td>
             <td>
                 <div>
-                    ${tx.is_shared ? '<span class="shared-badge" title="Gemeinsame Ausgabe">G</span>' : ''}
+                    ${tx.is_shared ? (() => {
+                        const label = tx.amount >= 0 ? 'Gemeinsame Einnahme' : 'Gemeinsame Ausgabe';
+                        const household = (userHouseholds || []).find(h => h.id === tx.shared_household_id);
+                        const title = household ? `${label} (${household.name})` : label;
+                        const badge = household ? household.name.substring(0, 2).toUpperCase() : 'G';
+                        return `<span class="shared-badge" title="${escapeHtml(title)}">${escapeHtml(badge)}</span>`;
+                    })() : ''}
                     ${escapeHtml(truncate(tx.counterpart_name || tx.booking_type || '-', 35))}
                 </div>
                 <div style="font-size: 0.75rem; color: var(--text-muted)">${escapeHtml(truncate(tx.purpose || '', 50))}</div>
@@ -374,8 +380,19 @@ async function showTransactionDetails(id) {
         notesInput.value = tx.notes || '';
         notesInput.dataset.id = tx.id;
 
-        // Shared checkbox
-        document.getElementById('detail-shared').checked = tx.is_shared || false;
+        // Shared checkbox + household picker
+        const sharedCheckbox = document.getElementById('detail-shared');
+        sharedCheckbox.checked = tx.is_shared || false;
+
+        // Populate household dropdown
+        const householdSelect = document.getElementById('detail-household');
+        householdSelect.innerHTML = '<option value="">Kein Haushalt zugewiesen</option>' +
+            (userHouseholds || []).map(h =>
+                `<option value="${h.id}" ${tx.shared_household_id === h.id ? 'selected' : ''}>${escapeHtml(h.name)}</option>`
+            ).join('');
+
+        // Show/hide household row
+        document.getElementById('detail-household-row').style.display = tx.is_shared ? '' : 'none';
 
         // Split button
         const splitBtn = document.getElementById('split-btn');
@@ -406,6 +423,8 @@ async function saveTransactionDetails() {
     const amount = parseFloat(document.getElementById('detail-amount').value);
     const notes = notesInput.value;
     const isShared = document.getElementById('detail-shared').checked;
+    const householdVal = document.getElementById('detail-household').value;
+    const sharedHouseholdId = isShared && householdVal ? parseInt(householdVal) : 0;
 
     if (!bookingDate) {
         showToast('Datum darf nicht leer sein', 'error');
@@ -424,7 +443,8 @@ async function saveTransactionDetails() {
             purpose: purpose || null,
             amount,
             notes,
-            is_shared: isShared
+            is_shared: isShared,
+            shared_household_id: sharedHouseholdId
         });
         showToast('Gespeichert', 'success');
         loadTransactions();
@@ -579,6 +599,11 @@ function showManualEntryModal() {
     `;
 
     openModal('manual-entry-modal');
+}
+
+function onSharedCheckboxChange() {
+    const checked = document.getElementById('detail-shared').checked;
+    document.getElementById('detail-household-row').style.display = checked ? '' : 'none';
 }
 
 async function deleteCurrentTransaction() {
