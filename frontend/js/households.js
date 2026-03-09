@@ -36,8 +36,8 @@ async function loadHouseholdManagement() {
                                     </span>
                                 </div>
                                 <div class="flex gap-2">
-                                    <button class="btn btn-sm btn-primary" onclick="handleAcceptInvite(${inv.id})">Annehmen</button>
-                                    <button class="btn btn-sm btn-secondary" onclick="handleDeclineInvite(${inv.id})">Ablehnen</button>
+                                    <button class="btn btn-sm btn-primary" data-action="handleAcceptInvite" data-id="${inv.id}">Annehmen</button>
+                                    <button class="btn btn-sm btn-secondary" data-action="handleDeclineInvite" data-id="${inv.id}">Ablehnen</button>
                                 </div>
                             </div>
                         `).join('')}
@@ -67,7 +67,7 @@ async function loadHouseholdManagement() {
                 <div class="card-header flex justify-between items-center">
                     <h3>${escapeHtml(h.name)}</h3>
                     <div class="flex gap-2">
-                        <button class="btn btn-sm btn-primary" onclick="showInviteModal(${h.id})">
+                        <button class="btn btn-sm btn-primary" data-action="showInviteModal" data-id="${h.id}">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
                                 <circle cx="8.5" cy="7" r="4"></circle>
@@ -76,7 +76,7 @@ async function loadHouseholdManagement() {
                             </svg>
                             Einladen
                         </button>
-                        <button class="btn btn-sm btn-secondary" onclick="viewSharedExpenses(${h.id}, ${h.members ? h.members.length : 2})">
+                        <button class="btn btn-sm btn-secondary" data-action="viewSharedExpenses" data-id="${h.id}" data-member-count="${h.members ? h.members.length : 2}">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="18" y1="20" x2="18" y2="10"></line>
                                 <line x1="12" y1="20" x2="12" y2="4"></line>
@@ -114,11 +114,11 @@ async function loadHouseholdManagement() {
                                         <td>${formatDate(m.joined_at)}</td>
                                         <td>
                                             ${m.user_id === currentUser.id ? `
-                                                <button class="btn btn-sm btn-secondary" onclick="handleLeaveHousehold(${h.id}, ${m.user_id})" title="Verlassen">
+                                                <button class="btn btn-sm btn-secondary" data-action="handleLeaveHousehold" data-id="${h.id}" data-user-id="${m.user_id}" title="Verlassen">
                                                     Verlassen
                                                 </button>
                                             ` : (h.created_by === currentUser.id ? `
-                                                <button class="btn btn-sm btn-secondary" onclick="handleRemoveMember(${h.id}, ${m.user_id})" title="Entfernen">
+                                                <button class="btn btn-sm btn-secondary" data-action="handleRemoveMember" data-id="${h.id}" data-user-id="${m.user_id}" title="Entfernen">
                                                     Entfernen
                                                 </button>
                                             ` : '')}
@@ -253,7 +253,8 @@ function viewSharedExpenses(householdId, memberCount) {
     let householdName = 'Haushalt';
     households.forEach(card => {
         const h3 = card.querySelector('h3');
-        if (h3 && card.querySelector(`[onclick*="viewSharedExpenses(${householdId}"]`)) {
+        const btn = card.querySelector(`[data-action="viewSharedExpenses"][data-id="${householdId}"]`);
+        if (h3 && btn) {
             householdName = h3.textContent;
         }
     });
@@ -307,12 +308,12 @@ async function loadSharedExpensesView(householdId, memberCount, householdName) {
                         <h3>Gemeinsame Ausgaben - ${escapeHtml(householdName)}</h3>
                     </div>
                     <div class="flex gap-2 items-center">
-                        <select class="form-control" style="width: auto;" onchange="changeHouseholdExpensesPeriod(this.value, ${householdId}, ${memberCount}, '${escapeHtml(householdName).replace(/'/g, "\\'")}')">
+                        <select class="form-control" style="width: auto;" data-onchange="changeHouseholdExpensesPeriod" data-household-id="${householdId}" data-member-count="${memberCount}" data-household-name="${escapeHtml(householdName)}">
                             ${Object.entries(periodLabels).map(([val, label]) =>
                                 `<option value="${val}" ${val === householdExpensesPeriod ? 'selected' : ''}>${label}</option>`
                             ).join('')}
                         </select>
-                        <button class="btn btn-sm btn-secondary" onclick="closeSharedExpensesView()" title="Schliessen">
+                        <button class="btn btn-sm btn-secondary" data-action="closeSharedExpensesView" title="Schliessen">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="18" y1="6" x2="6" y2="18"></line>
                                 <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -396,7 +397,7 @@ async function loadSharedExpensesView(householdId, memberCount, householdName) {
             <div class="card" style="border-left: 4px solid var(--danger-color);">
                 <div class="card-header flex justify-between items-center">
                     <h3>Gemeinsame Ausgaben</h3>
-                    <button class="btn btn-sm btn-secondary" onclick="closeSharedExpensesView()">Schliessen</button>
+                    <button class="btn btn-sm btn-secondary" data-action="closeSharedExpensesView">Schliessen</button>
                 </div>
                 <div class="card-body">
                     <p style="color: var(--danger-color);">Fehler: ${escapeHtml(error.message)}</p>

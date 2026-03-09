@@ -83,6 +83,7 @@ class PasswordChange(BaseModel):
 
 class AdminUserUpdate(BaseModel):
     is_active: Optional[bool] = None
+    is_admin: Optional[bool] = None
     display_name: Optional[str] = None
     new_password: Optional[str] = None
 

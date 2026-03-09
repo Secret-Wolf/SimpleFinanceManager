@@ -47,6 +47,11 @@ async function loadUserManagement() {
                                                     </svg>
                                                 </button>
                                                 ${u.id !== currentUser.id ? `
+                                                    <button class="btn btn-sm ${u.is_admin ? 'btn-primary' : 'btn-secondary'}"
+                                                        onclick="toggleUserAdmin(${u.id}, ${u.is_admin})"
+                                                        title="${u.is_admin ? 'Admin-Rechte entziehen' : 'Zum Admin machen'}">
+                                                        ${u.is_admin ? 'Admin' : 'User'}
+                                                    </button>
                                                     <button class="btn btn-sm ${u.is_active ? 'btn-secondary' : 'btn-primary'}"
                                                         onclick="toggleUserActive(${u.id}, ${u.is_active})"
                                                         title="${u.is_active ? 'Deaktivieren' : 'Aktivieren'}">
@@ -137,6 +142,20 @@ async function saveUser() {
         loadUserManagement();
     } catch (error) {
         errorEl.textContent = error.message || 'Fehler beim Speichern';
+    }
+}
+
+async function toggleUserAdmin(id, currentStatus) {
+    const action = currentStatus ? 'Admin-Rechte entziehen' : 'zum Admin machen';
+    if (!confirm(`Benutzer wirklich ${action}?`)) return;
+
+    try {
+        await api.updateUser(id, { is_admin: !currentStatus });
+        showToast(`Benutzer ${currentStatus ? 'ist kein Admin mehr' : 'ist jetzt Admin'}`, 'success');
+        _usersCache = [];
+        loadUserManagement();
+    } catch (error) {
+        showToast('Fehler: ' + error.message, 'error');
     }
 }
 

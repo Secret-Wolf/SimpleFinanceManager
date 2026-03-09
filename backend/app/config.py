@@ -2,6 +2,7 @@
 
 import os
 import secrets
+import sys
 
 
 class Settings:
@@ -35,14 +36,28 @@ class Settings:
             secret_file = os.path.join(
                 os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", ".secret_key"
             )
-            if os.path.exists(secret_file):
-                with open(secret_file, "r") as f:
-                    self.SECRET_KEY = f.read().strip()
-            else:
-                self.SECRET_KEY = secrets.token_urlsafe(64)
-                os.makedirs(os.path.dirname(secret_file), exist_ok=True)
-                with open(secret_file, "w") as f:
-                    f.write(self.SECRET_KEY)
+            os.makedirs(os.path.dirname(secret_file), exist_ok=True)
+            lock_file = secret_file + ".lock"
+
+            # Cross-platform file locking
+            lf = open(lock_file, "w")
+            try:
+                if sys.platform == "win32":
+                    import msvcrt
+                    msvcrt.locking(lf.fileno(), msvcrt.LK_LOCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(lf, fcntl.LOCK_EX)
+
+                if os.path.exists(secret_file):
+                    with open(secret_file, "r") as f:
+                        self.SECRET_KEY = f.read().strip()
+                if not self.SECRET_KEY:
+                    self.SECRET_KEY = secrets.token_urlsafe(64)
+                    with open(secret_file, "w") as f:
+                        f.write(self.SECRET_KEY)
+            finally:
+                lf.close()
 
 
 settings = Settings()

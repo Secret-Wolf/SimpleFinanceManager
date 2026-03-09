@@ -173,7 +173,7 @@ async function loadDashboard() {
                     <div class="value negative">${formatCurrency(summary.expenses_current_month)}</div>
                     ${expenseChange !== null ? `<div class="change ${expenseChange <= 0 ? 'up' : 'down'}">${formatPercent(-expenseChange)} zum Vormonat</div>` : ''}
                 </div>
-                <div class="stat-card" style="cursor:pointer" onclick="navigateTo('transactions'); document.getElementById('uncategorized-filter').checked = true; loadTransactions();">
+                <div class="stat-card" style="cursor:pointer" data-action="navigateToTransactionsUncategorized">
                     <div class="label">Unkategorisiert</div>
                     <div class="value" style="color: var(--warning-color)">${summary.uncategorized_count}</div>
                 </div>
@@ -209,7 +209,7 @@ async function loadDashboard() {
                 <div class="card" style="flex: 2; min-width: 400px;">
                     <div class="card-header">
                         <h3>Letzte Transaktionen</h3>
-                        <button class="btn btn-sm btn-secondary" onclick="navigateTo('transactions')">Alle anzeigen</button>
+                        <button class="btn btn-sm btn-secondary" data-action="navigateTo" data-value="transactions">Alle anzeigen</button>
                     </div>
                     <div class="card-body">
                         ${summary.recent_transactions.length > 0 ? `

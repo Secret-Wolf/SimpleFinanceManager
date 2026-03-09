@@ -184,6 +184,15 @@ function showUserProfile() {
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     document.getElementById('dark-mode-toggle').checked = isDark;
 
+    // Populate export account dropdown
+    const exportAccountSelect = document.getElementById('export-account');
+    if (exportAccountSelect && typeof accounts !== 'undefined') {
+        exportAccountSelect.innerHTML = `
+            <option value="">Alle Konten</option>
+            ${accounts.map(acc => `<option value="${acc.id}">${acc.name}${acc.bank_name ? ' (' + acc.bank_name + ')' : ''}</option>`).join('')}
+        `;
+    }
+
     openModal('user-profile-modal');
 }
 
@@ -259,6 +268,38 @@ async function changeUserPassword() {
         }
     } catch (error) {
         showToast('Verbindungsfehler', 'error');
+    }
+}
+
+// Transaction Export
+async function exportTransactions() {
+    const accountId = document.getElementById('export-account').value;
+    const startDate = document.getElementById('export-start-date').value;
+    const endDate = document.getElementById('export-end-date').value;
+
+    const params = new URLSearchParams();
+    if (accountId) params.append('account_id', accountId);
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+
+    try {
+        const response = await fetch(`/api/transactions/export?${params}`);
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.detail || 'Export fehlgeschlagen');
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `transaktionen-export-${new Date().toISOString().split('T')[0]}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+
+        showToast('Export erstellt', 'success');
+    } catch (error) {
+        showToast('Fehler: ' + error.message, 'error');
     }
 }
 

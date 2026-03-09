@@ -65,7 +65,7 @@
             <!-- Account Selector -->
             <div class="account-selector">
                 <label>Konto</label>
-                <select id="global-account-filter" onchange="onAccountFilterChange()">
+                <select id="global-account-filter">
                     <option value="">Alle Konten</option>
                 </select>
             </div>
@@ -145,8 +145,8 @@
             </nav>
             <div class="sidebar-footer">
                 <div class="user-info">
-                    <span id="user-display-name" class="user-name" onclick="showUserProfile()" style="cursor: pointer;" title="Profil bearbeiten"></span>
-                    <button class="btn btn-sm btn-icon" onclick="showUserProfile()" title="Profil">
+                    <span id="user-display-name" class="user-name" data-action="showUserProfile" style="cursor: pointer;" title="Profil bearbeiten"></span>
+                    <button class="btn btn-sm btn-icon" data-action="showUserProfile" title="Profil">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                             <circle cx="12" cy="7" r="4"></circle>
@@ -176,7 +176,7 @@
                         <h2>Transaktionen</h2>
                         <p>Alle Buchungen im Überblick</p>
                     </div>
-                    <button class="btn btn-primary" onclick="showManualEntryModal()">
+                    <button class="btn btn-primary" data-action="showManualEntryModal">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <line x1="12" y1="5" x2="12" y2="19"></line>
                             <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -192,36 +192,36 @@
                             <circle cx="11" cy="11" r="8"></circle>
                             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                         </svg>
-                        <input type="text" id="tx-search" class="form-control" placeholder="Suche..." oninput="debounce(applyTransactionFilters, 300)()">
+                        <input type="text" id="tx-search" class="form-control" placeholder="Suche...">
                     </div>
 
                     <div class="filter-group">
-                        <button class="btn btn-sm btn-secondary" onclick="setQuickPeriod('week')">Woche</button>
-                        <button class="btn btn-sm btn-secondary" onclick="setQuickPeriod('month')">Monat</button>
-                        <button class="btn btn-sm btn-secondary" onclick="setQuickPeriod('quarter')">Quartal</button>
-                        <button class="btn btn-sm btn-secondary" onclick="setQuickPeriod('year')">Jahr</button>
+                        <button class="btn btn-sm btn-secondary" data-action="setQuickPeriod" data-value="week">Woche</button>
+                        <button class="btn btn-sm btn-secondary" data-action="setQuickPeriod" data-value="month">Monat</button>
+                        <button class="btn btn-sm btn-secondary" data-action="setQuickPeriod" data-value="quarter">Quartal</button>
+                        <button class="btn btn-sm btn-secondary" data-action="setQuickPeriod" data-value="year">Jahr</button>
                     </div>
 
-                    <input type="date" id="tx-start-date" class="form-control" style="width: 140px;" onchange="applyTransactionFilters()">
-                    <input type="date" id="tx-end-date" class="form-control" style="width: 140px;" onchange="applyTransactionFilters()">
+                    <input type="date" id="tx-start-date" class="form-control" style="width: 140px;">
+                    <input type="date" id="tx-end-date" class="form-control" style="width: 140px;">
 
-                    <select id="tx-category-filter" class="form-control" style="width: 180px;" onchange="applyTransactionFilters()">
+                    <select id="tx-category-filter" class="form-control" style="width: 180px;">
                         <option value="">Alle Kategorien</option>
                     </select>
 
-                    <select id="tx-amount-type" class="form-control" style="width: 140px;" onchange="applyTransactionFilters()">
+                    <select id="tx-amount-type" class="form-control" style="width: 140px;">
                         <option value="">Alle</option>
                         <option value="income">Einnahmen</option>
                         <option value="expenses">Ausgaben</option>
                     </select>
 
                     <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                        <input type="checkbox" id="uncategorized-filter" onchange="applyTransactionFilters()">
+                        <input type="checkbox" id="uncategorized-filter">
                         <span>Nur unkategorisiert</span>
                     </label>
 
                     <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                        <input type="checkbox" id="shared-filter" onchange="applyTransactionFilters()">
+                        <input type="checkbox" id="shared-filter">
                         <span>Nur gemeinsame</span>
                     </label>
                 </div>
@@ -233,10 +233,10 @@
                         <select id="bulk-category" class="form-control" style="width: 200px;">
                             <option value="">Kategorie wählen</option>
                         </select>
-                        <button class="btn btn-primary btn-sm" onclick="bulkCategorize()">Kategorie zuweisen</button>
-                        <button class="btn btn-secondary btn-sm" onclick="bulkSetShared(true)">Gemeinsam markieren</button>
-                        <button class="btn btn-secondary btn-sm" onclick="bulkSetShared(false)">Persoenlich markieren</button>
-                        <button class="btn btn-secondary btn-sm" onclick="selectedTransactions.clear(); updateBulkActions(); loadTransactions();">Auswahl aufheben</button>
+                        <button class="btn btn-primary btn-sm" data-action="bulkCategorize">Kategorie zuweisen</button>
+                        <button class="btn btn-secondary btn-sm" data-action="bulkSetShared" data-value="true">Gemeinsam markieren</button>
+                        <button class="btn btn-secondary btn-sm" data-action="bulkSetShared" data-value="false">Persoenlich markieren</button>
+                        <button class="btn btn-secondary btn-sm" data-action="clearSelection">Auswahl aufheben</button>
                     </div>
                 </div>
 
@@ -247,7 +247,7 @@
                             <thead>
                                 <tr>
                                     <th style="width: 40px;">
-                                        <input type="checkbox" class="checkbox" onclick="selectAllTransactions()">
+                                        <input type="checkbox" class="checkbox" id="select-all-tx">
                                     </th>
                                     <th style="width: 100px;">Datum</th>
                                     <th>Empfänger / Verwendungszweck</th>
@@ -272,7 +272,7 @@
                         <h2>Kategorien</h2>
                         <p>Verwalte deine Kategorien</p>
                     </div>
-                    <button class="btn btn-primary" onclick="showAddCategoryModal()">
+                    <button class="btn btn-primary" data-action="showAddCategoryModal">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <line x1="12" y1="5" x2="12" y2="19"></line>
                             <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -295,21 +295,21 @@
                         <p>Automatische Kategorisierung einrichten</p>
                     </div>
                     <div class="flex gap-2">
-                        <button class="btn btn-secondary" onclick="applyAllRules(false)" title="Nur unkategorisierte Transaktionen kategorisieren">
+                        <button class="btn btn-secondary" data-action="applyAllRules" data-value="false" title="Nur unkategorisierte Transaktionen kategorisieren">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polyline points="23 4 23 10 17 10"></polyline>
                                 <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
                             </svg>
                             Regeln anwenden
                         </button>
-                        <button class="btn btn-secondary" onclick="applyAllRules(true)" title="Alle Transaktionen neu kategorisieren (überschreibt bestehende Kategorien)">
+                        <button class="btn btn-secondary" data-action="applyAllRules" data-value="true" title="Alle Transaktionen neu kategorisieren (überschreibt bestehende Kategorien)">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
                                 <path d="M3 3v5h5"></path>
                             </svg>
                             Alle neu kategorisieren
                         </button>
-                        <button class="btn btn-primary" onclick="showAddRuleModal()">
+                        <button class="btn btn-primary" data-action="showAddRuleModal">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="12" y1="5" x2="12" y2="19"></line>
                                 <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -333,7 +333,7 @@
                         <p>Deine Finanzen im Detail</p>
                     </div>
                     <div class="flex gap-2 items-center flex-wrap">
-                        <select id="stats-period" class="form-control" onchange="changeStatsPeriod()">
+                        <select id="stats-period" class="form-control">
                             <option value="month">Dieser Monat</option>
                             <option value="last_month">Letzter Monat</option>
                             <option value="since_salary">Seit letztem Gehalt</option>
@@ -345,9 +345,9 @@
                             <input type="date" id="stats-start-date" class="form-control" style="width: 140px;">
                             <span style="color: var(--text-secondary);">bis</span>
                             <input type="date" id="stats-end-date" class="form-control" style="width: 140px;">
-                            <button class="btn btn-primary btn-sm" onclick="applyCustomStatsPeriod()">Anwenden</button>
+                            <button class="btn btn-primary btn-sm" data-action="applyCustomStatsPeriod">Anwenden</button>
                         </div>
-                        <button class="btn btn-secondary" onclick="exportStats()">
+                        <button class="btn btn-secondary" data-action="exportStats">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                                 <polyline points="7 10 12 15 17 10"></polyline>
@@ -428,7 +428,7 @@
                         <h2>Konten</h2>
                         <p>Übersicht aller verbundenen Bankkonten</p>
                     </div>
-                    <button class="btn btn-primary" onclick="showCreateAccountModal()">+ Konto erstellen</button>
+                    <button class="btn btn-primary" data-action="showCreateAccountModal">+ Konto erstellen</button>
                 </div>
 
                 <!-- Total Balance Card -->
@@ -456,7 +456,7 @@
                         <h2>Haushalt</h2>
                         <p>Gemeinsame Finanzen verwalten</p>
                     </div>
-                    <button class="btn btn-primary" onclick="showCreateHouseholdModal()">
+                    <button class="btn btn-primary" data-action="showCreateHouseholdModal">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <line x1="12" y1="5" x2="12" y2="19"></line>
                             <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -484,7 +484,7 @@
                         <h2>Benutzerverwaltung</h2>
                         <p>Benutzerkonten verwalten</p>
                     </div>
-                    <button class="btn btn-primary" onclick="showCreateUserModal()">
+                    <button class="btn btn-primary" data-action="showCreateUserModal">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <line x1="12" y1="5" x2="12" y2="19"></line>
                             <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -550,7 +550,7 @@
         <div class="modal" style="max-width: 600px;">
             <div class="modal-header">
                 <h3>Transaktionsdetails</h3>
-                <button class="modal-close" onclick="closeModal('transaction-detail-modal')">
+                <button class="modal-close">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -584,7 +584,7 @@
                 </div>
 
                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 12px;">
-                    <input type="checkbox" id="detail-shared" onchange="onSharedCheckboxChange()">
+                    <input type="checkbox" id="detail-shared">
                     <span>Gemeinsame Buchung</span>
                 </label>
                 <div id="detail-household-row" style="margin-top: 10px; display: none;">
@@ -595,11 +595,11 @@
                 </div>
             </div>
             <div class="modal-footer" style="justify-content: space-between;">
-                <button id="delete-transaction-btn" class="btn btn-danger" onclick="deleteCurrentTransaction()">Löschen</button>
+                <button id="delete-transaction-btn" class="btn btn-danger" data-action="deleteCurrentTransaction">Löschen</button>
                 <div class="flex gap-2">
                     <button id="split-btn" class="btn btn-secondary">Aufteilen</button>
                     <button id="create-rule-btn" class="btn btn-secondary">Regel erstellen</button>
-                    <button class="btn btn-primary" onclick="saveTransactionDetails(); closeModal('transaction-detail-modal')">Speichern</button>
+                    <button class="btn btn-primary" data-action="saveAndCloseTransactionDetail">Speichern</button>
                 </div>
             </div>
         </div>
@@ -610,7 +610,7 @@
         <div class="modal" style="max-width: 600px;">
             <div class="modal-header">
                 <h3>Transaktion aufteilen</h3>
-                <button class="modal-close" onclick="closeModal('split-modal')">
+                <button class="modal-close">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -628,7 +628,7 @@
                 <div id="split-parts">
                 </div>
 
-                <button class="btn btn-secondary btn-sm" onclick="addSplitPart()">
+                <button class="btn btn-secondary btn-sm" data-action="addSplitPart">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="12" y1="5" x2="12" y2="19"></line>
                         <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -637,8 +637,8 @@
                 </button>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeModal('split-modal')">Abbrechen</button>
-                <button class="btn btn-primary" onclick="saveSplit()">Aufteilen</button>
+                <button class="btn btn-secondary" data-close-modal="split-modal">Abbrechen</button>
+                <button class="btn btn-primary" data-action="saveSplit">Aufteilen</button>
             </div>
         </div>
     </div>
@@ -648,7 +648,7 @@
         <div class="modal">
             <div class="modal-header">
                 <h3>Regel erstellen</h3>
-                <button class="modal-close" onclick="closeModal('create-rule-modal')">
+                <button class="modal-close">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -682,8 +682,8 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeModal('create-rule-modal')">Abbrechen</button>
-                <button class="btn btn-primary" onclick="saveRuleFromTransaction()">Regel erstellen</button>
+                <button class="btn btn-secondary" data-close-modal="create-rule-modal">Abbrechen</button>
+                <button class="btn btn-primary" data-action="saveRuleFromTransaction">Regel erstellen</button>
             </div>
         </div>
     </div>
@@ -693,7 +693,7 @@
         <div class="modal">
             <div class="modal-header">
                 <h3 id="category-modal-title">Neue Kategorie</h3>
-                <button class="modal-close" onclick="closeModal('category-modal')">
+                <button class="modal-close">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -728,8 +728,8 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeModal('category-modal')">Abbrechen</button>
-                <button class="btn btn-primary" onclick="saveCategory()">Speichern</button>
+                <button class="btn btn-secondary" data-close-modal="category-modal">Abbrechen</button>
+                <button class="btn btn-primary" data-action="saveCategory">Speichern</button>
             </div>
         </div>
     </div>
@@ -739,7 +739,7 @@
         <div class="modal">
             <div class="modal-header">
                 <h3>Kategorie löschen</h3>
-                <button class="modal-close" onclick="closeModal('delete-category-modal')">
+                <button class="modal-close">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -762,8 +762,8 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeModal('delete-category-modal')">Abbrechen</button>
-                <button class="btn btn-danger" onclick="confirmDeleteCategory()">Löschen</button>
+                <button class="btn btn-secondary" data-close-modal="delete-category-modal">Abbrechen</button>
+                <button class="btn btn-danger" data-action="confirmDeleteCategory">Löschen</button>
             </div>
         </div>
     </div>
@@ -773,7 +773,7 @@
         <div class="modal" style="max-width: 600px;">
             <div class="modal-header">
                 <h3 id="rule-modal-title">Neue Regel</h3>
-                <button class="modal-close" onclick="closeModal('rule-modal')">
+                <button class="modal-close">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -849,8 +849,8 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeModal('rule-modal')">Abbrechen</button>
-                <button class="btn btn-primary" onclick="saveRule()">Speichern</button>
+                <button class="btn btn-secondary" data-close-modal="rule-modal">Abbrechen</button>
+                <button class="btn btn-primary" data-action="saveRule">Speichern</button>
             </div>
         </div>
     </div>
@@ -860,7 +860,7 @@
         <div class="modal">
             <div class="modal-header">
                 <h3>Manueller Eintrag</h3>
-                <button class="modal-close" onclick="closeModal('manual-entry-modal')">
+                <button class="modal-close">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -919,8 +919,8 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeModal('manual-entry-modal')">Abbrechen</button>
-                <button class="btn btn-primary" onclick="saveManualEntry()">Speichern</button>
+                <button class="btn btn-secondary" data-close-modal="manual-entry-modal">Abbrechen</button>
+                <button class="btn btn-primary" data-action="saveManualEntry">Speichern</button>
             </div>
         </div>
     </div>
@@ -930,7 +930,7 @@
         <div class="modal" style="max-width: 480px;">
             <div class="modal-header">
                 <h3>Mein Profil</h3>
-                <button class="modal-close" onclick="closeModal('user-profile-modal')">
+                <button class="modal-close">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -948,7 +948,7 @@
                     <input type="email" id="profile-email" class="form-control">
                 </div>
                 <div class="modal-footer" style="padding: 0 0 16px 0; border: none;">
-                    <button class="btn btn-primary" onclick="saveUserProfile()">Profil speichern</button>
+                    <button class="btn btn-primary" data-action="saveUserProfile">Profil speichern</button>
                 </div>
 
                 <hr style="border-color: var(--border-color); margin: 8px 0 16px;">
@@ -957,7 +957,7 @@
                 <div class="form-group" style="display: flex; align-items: center; justify-content: space-between;">
                     <label style="margin: 0;">Dark Mode</label>
                     <label class="toggle-switch">
-                        <input type="checkbox" id="dark-mode-toggle" onchange="toggleDarkMode()">
+                        <input type="checkbox" id="dark-mode-toggle">
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
@@ -980,7 +980,7 @@
                     <input type="password" id="profile-new-password-confirm" class="form-control" autocomplete="new-password">
                 </div>
                 <div class="modal-footer" style="padding: 0 0 16px 0; border: none;">
-                    <button class="btn btn-primary" onclick="changeUserPassword()">Passwort ändern</button>
+                    <button class="btn btn-primary" data-action="changeUserPassword">Passwort ändern</button>
                 </div>
 
                 <hr style="border-color: var(--border-color); margin: 8px 0 16px;">
@@ -1004,7 +1004,7 @@
                     </div>
                 </div>
                 <div class="modal-footer" style="padding: 0 0 16px 0; border: none;">
-                    <button class="btn btn-primary" onclick="exportTransactions()">
+                    <button class="btn btn-primary" data-action="exportTransactions">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 6px;">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                             <polyline points="7 10 12 15 17 10"></polyline>
@@ -1017,7 +1017,7 @@
                 <hr style="border-color: var(--border-color); margin: 8px 0 16px;">
 
                 <!-- Logout -->
-                <button class="btn btn-secondary" onclick="handleLogout()" style="width: 100%;">
+                <button class="btn btn-secondary" data-action="handleLogout" style="width: 100%;">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 6px;">
                         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
                         <polyline points="16 17 21 12 16 7"></polyline>
@@ -1034,7 +1034,7 @@
         <div class="modal" style="max-width: 400px;">
             <div class="modal-header">
                 <h3>Konto erstellen</h3>
-                <button class="modal-close" onclick="closeModal('create-account-modal')">
+                <button class="modal-close">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -1058,8 +1058,8 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeModal('create-account-modal')">Abbrechen</button>
-                <button class="btn btn-primary" onclick="saveNewAccount()">Erstellen</button>
+                <button class="btn btn-secondary" data-close-modal="create-account-modal">Abbrechen</button>
+                <button class="btn btn-primary" data-action="saveNewAccount">Erstellen</button>
             </div>
         </div>
     </div>
@@ -1069,7 +1069,7 @@
         <div class="modal">
             <div class="modal-header">
                 <h3 id="user-modal-title">Neuer Benutzer</h3>
-                <button class="modal-close" onclick="closeModal('user-modal')">
+                <button class="modal-close">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -1094,8 +1094,8 @@
                 <div id="user-modal-error" class="auth-error"></div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeModal('user-modal')">Abbrechen</button>
-                <button class="btn btn-primary" onclick="saveUser()">Speichern</button>
+                <button class="btn btn-secondary" data-close-modal="user-modal">Abbrechen</button>
+                <button class="btn btn-primary" data-action="saveUser">Speichern</button>
             </div>
         </div>
     </div>
@@ -1105,7 +1105,7 @@
         <div class="modal">
             <div class="modal-header">
                 <h3 id="household-modal-title">Neuer Haushalt</h3>
-                <button class="modal-close" onclick="closeModal('household-modal')">
+                <button class="modal-close">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -1120,8 +1120,8 @@
                 <div id="household-modal-error" class="auth-error"></div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeModal('household-modal')">Abbrechen</button>
-                <button class="btn btn-primary" onclick="saveHousehold()">Erstellen</button>
+                <button class="btn btn-secondary" data-close-modal="household-modal">Abbrechen</button>
+                <button class="btn btn-primary" data-action="saveHousehold">Erstellen</button>
             </div>
         </div>
     </div>
@@ -1131,7 +1131,7 @@
         <div class="modal">
             <div class="modal-header">
                 <h3>Mitglied einladen</h3>
-                <button class="modal-close" onclick="closeModal('invite-modal')">
+                <button class="modal-close">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -1148,8 +1148,8 @@
                 <div id="invite-modal-error" class="auth-error"></div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeModal('invite-modal')">Abbrechen</button>
-                <button class="btn btn-primary" onclick="sendInvite()">Einladen</button>
+                <button class="btn btn-secondary" data-close-modal="invite-modal">Abbrechen</button>
+                <button class="btn btn-primary" data-action="sendInvite">Einladen</button>
             </div>
         </div>
     </div>
@@ -1158,6 +1158,7 @@
     <div id="toast-container" class="toast-container"></div>
 
     <!-- Scripts -->
+    <script src="/static/js/event-handlers.js"></script>
     <script src="/static/js/api.js"></script>
     <script src="/static/js/utils.js"></script>
     <script src="/static/js/transactions.js"></script>

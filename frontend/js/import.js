@@ -68,7 +68,7 @@ async function handleFileUpload(file) {
                 ${result.transactions_duplicate} Duplikate übersprungen<br>
                 ${result.transactions_error > 0 ? `${result.transactions_error} Fehler` : ''}
             </p>
-            <button class="btn btn-primary mt-4" onclick="navigateTo('transactions')">Transaktionen anzeigen</button>
+            <button class="btn btn-primary mt-4" data-action="navigateTo" data-value="transactions">Transaktionen anzeigen</button>
         `;
 
         // Refresh import history
@@ -88,7 +88,7 @@ async function handleFileUpload(file) {
             </svg>
             <h4>Import fehlgeschlagen</h4>
             <p>${escapeHtml(error.message)}</p>
-            <button class="btn btn-secondary mt-4" onclick="resetDropzone()">Erneut versuchen</button>
+            <button class="btn btn-secondary mt-4" data-action="resetDropzone">Erneut versuchen</button>
         `;
     }
 }

@@ -276,8 +276,17 @@ def update_user_by_admin(
             detail="Eigenes Konto kann nicht deaktiviert werden"
         )
 
+    if data.is_admin is False and user.id == admin.id:
+        raise HTTPException(
+            status_code=400,
+            detail="Eigene Admin-Rechte können nicht entfernt werden"
+        )
+
     if data.is_active is not None:
         user.is_active = data.is_active
+
+    if data.is_admin is not None:
+        user.is_admin = data.is_admin
 
     if data.display_name is not None:
         user.display_name = data.display_name.strip()

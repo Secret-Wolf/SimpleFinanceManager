@@ -25,7 +25,7 @@ router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 @router.get("", response_model=schemas.TransactionList)
 def get_transactions(
     page: int = Query(1, ge=1),
-    per_page: int = Query(50, ge=1, le=200),
+    per_page: int = Query(50, ge=1, le=1000),
     sort_by: str = Query("booking_date", pattern="^(booking_date|amount|counterpart_name)$"),
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
     start_date: Optional[date] = None,
@@ -243,7 +243,10 @@ def update_transaction(
     if update.category_id is not None:
         # Verify category exists
         if update.category_id != 0:
-            category = db.query(Category).filter(Category.id == update.category_id).first()
+            category = db.query(Category).filter(
+                Category.id == update.category_id,
+                Category.user_id == current_user.id,
+            ).first()
             if not category:
                 raise HTTPException(status_code=400, detail="Kategorie nicht gefunden")
             transaction.category_id = update.category_id
@@ -324,7 +327,10 @@ def split_transaction(
 
     for i, part in enumerate(split_data.parts):
         # Verify category exists
-        category = db.query(Category).filter(Category.id == part.category_id).first()
+        category = db.query(Category).filter(
+            Category.id == part.category_id,
+            Category.user_id == current_user.id,
+        ).first()
         if not category:
             raise HTTPException(status_code=400, detail=f"Kategorie {part.category_id} nicht gefunden")
 
@@ -425,7 +431,10 @@ def bulk_categorize(
     """Assign category to multiple transactions"""
     # Verify category exists
     if category_id != 0:
-        category = db.query(Category).filter(Category.id == category_id).first()
+        category = db.query(Category).filter(
+            Category.id == category_id,
+            Category.user_id == current_user.id,
+        ).first()
         if not category:
             raise HTTPException(status_code=400, detail="Kategorie nicht gefunden")
 
@@ -503,7 +512,10 @@ def create_manual_transaction(
 
     # Kategorie validieren falls angegeben
     if data.category_id:
-        category = db.query(Category).filter(Category.id == data.category_id).first()
+        category = db.query(Category).filter(
+            Category.id == data.category_id,
+            Category.user_id == current_user.id,
+        ).first()
         if not category:
             raise HTTPException(status_code=400, detail="Kategorie nicht gefunden")
 

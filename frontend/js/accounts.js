@@ -22,14 +22,14 @@ async function loadAccounts() {
                     </svg>
                     <h3 style="margin-bottom: 8px;">Noch keine Konten</h3>
                     <p style="color: var(--text-secondary);">Importiere eine CSV-Datei, um dein erstes Konto anzulegen.</p>
-                    <button class="btn btn-primary mt-4" onclick="navigateTo('import')">CSV importieren</button>
+                    <button class="btn btn-primary mt-4" data-action="navigateTo" data-value="import">CSV importieren</button>
                 </div>
             `;
             return;
         }
 
         container.innerHTML = data.accounts.map(account => `
-            <div class="card account-card" onclick="showAccountDetail(${account.id})">
+            <div class="card account-card" data-action="showAccountDetail" data-id="${account.id}">
                 <div class="account-header">
                     <div class="account-bank">
                         <span class="bank-icon">${getBankIcon(account.bank_name)}</span>

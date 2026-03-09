@@ -105,14 +105,23 @@ function debounce(func, wait) {
 }
 
 // Show toast notification
-function showToast(message, type = 'info') {
+// options: { undoCallback: Function } - if provided, shows an Undo button
+function showToast(message, type = 'info', options = {}) {
     const container = document.getElementById('toast-container') || createToastContainer();
 
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
+
+    const undoHtml = options.undoCallback ? `
+        <button class="toast-undo-btn" style="background:none;border:1px solid currentColor;border-radius:4px;cursor:pointer;padding:2px 8px;margin-left:8px;color:inherit;font-size:0.8rem;">
+            Rückgängig
+        </button>
+    ` : '';
+
     toast.innerHTML = `
         <span>${escapeHtml(message)}</span>
-        <button onclick="this.parentElement.remove()" style="background:none;border:none;cursor:pointer;margin-left:auto;">
+        ${undoHtml}
+        <button data-action="removeToast" style="background:none;border:none;cursor:pointer;margin-left:auto;color:inherit;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
                 <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -120,12 +129,21 @@ function showToast(message, type = 'info') {
         </button>
     `;
 
+    if (options.undoCallback) {
+        const undoBtn = toast.querySelector('.toast-undo-btn');
+        undoBtn.addEventListener('click', () => {
+            options.undoCallback();
+            toast.remove();
+        });
+    }
+
     container.appendChild(toast);
 
-    // Auto remove after 5 seconds
+    // Auto remove (longer for undo toasts)
+    const duration = options.undoCallback ? 10000 : 5000;
     setTimeout(() => {
         toast.remove();
-    }, 5000);
+    }, duration);
 }
 
 function createToastContainer() {

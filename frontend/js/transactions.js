@@ -14,6 +14,7 @@ let transactionFilters = {
 };
 
 let selectedTransactions = new Set();
+let lastBulkSnapshot = null; // For undo: array of { id, category_id, is_shared }
 let isLoadingMore = false;
 let hasMoreTransactions = true;
 let totalTransactionCount = 0;
@@ -47,7 +48,7 @@ async function loadTransactions() {
                             </svg>
                             <h3>Keine Transaktionen</h3>
                             <p>Importiere eine CSV-Datei, um zu beginnen.</p>
-                            <button class="btn btn-primary" onclick="navigateTo('import')">CSV importieren</button>
+                            <button class="btn btn-primary" data-action="navigateTo" data-value="import">CSV importieren</button>
                         </div>
                     </td>
                 </tr>
@@ -164,7 +165,7 @@ function renderTransactionRows(items) {
                 ${formatCurrency(tx.amount)}
             </td>
             <td>
-                <button class="btn btn-sm btn-icon" onclick="showTransactionDetails(${tx.id})" title="Details">
+                <button class="btn btn-sm btn-icon" data-action="showTransactionDetails" data-id="${tx.id}" title="Details">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="10"></circle>
                         <line x1="12" y1="16" x2="12" y2="12"></line>
@@ -300,6 +301,55 @@ function updateBulkActions() {
     }
 }
 
+async function snapshotSelectedTransactions() {
+    const ids = [...selectedTransactions];
+    const snapshots = [];
+    for (const id of ids) {
+        try {
+            const tx = await api.getTransaction(id);
+            snapshots.push({
+                id: tx.id,
+                category_id: tx.category ? tx.category.id : null,
+                is_shared: tx.is_shared || false
+            });
+        } catch (e) {
+            // Skip if transaction not found
+        }
+    }
+    return snapshots;
+}
+
+async function undoBulkCategorize(snapshot) {
+    try {
+        for (const item of snapshot) {
+            await api.updateTransaction(item.id, { category_id: item.category_id });
+        }
+        showToast(`${snapshot.length} Transaktionen wiederhergestellt`, 'success');
+        loadTransactions();
+    } catch (error) {
+        showToast('Rückgängig fehlgeschlagen: ' + error.message, 'error');
+    }
+}
+
+async function undoBulkShared(snapshot) {
+    try {
+        // Group by is_shared state for efficient undo
+        const sharedIds = snapshot.filter(s => s.is_shared).map(s => s.id);
+        const personalIds = snapshot.filter(s => !s.is_shared).map(s => s.id);
+
+        if (sharedIds.length > 0) {
+            await api.bulkSetShared(sharedIds, true);
+        }
+        if (personalIds.length > 0) {
+            await api.bulkSetShared(personalIds, false);
+        }
+        showToast(`${snapshot.length} Transaktionen wiederhergestellt`, 'success');
+        loadTransactions();
+    } catch (error) {
+        showToast('Rückgängig fehlgeschlagen: ' + error.message, 'error');
+    }
+}
+
 async function bulkCategorize() {
     const categoryId = document.getElementById('bulk-category').value;
     if (!categoryId) {
@@ -308,11 +358,15 @@ async function bulkCategorize() {
     }
 
     try {
+        const snapshot = await snapshotSelectedTransactions();
         await api.bulkCategorize([...selectedTransactions], parseInt(categoryId));
-        showToast(`${selectedTransactions.size} Transaktionen kategorisiert`, 'success');
+        const count = selectedTransactions.size;
         selectedTransactions.clear();
         updateBulkActions();
         loadTransactions();
+        showToast(`${count} Transaktionen kategorisiert`, 'success', {
+            undoCallback: () => undoBulkCategorize(snapshot)
+        });
     } catch (error) {
         showToast('Fehler: ' + error.message, 'error');
     }
@@ -322,12 +376,16 @@ async function bulkSetShared(isShared) {
     if (selectedTransactions.size === 0) return;
 
     try {
+        const snapshot = await snapshotSelectedTransactions();
         await api.bulkSetShared([...selectedTransactions], isShared);
-        const label = isShared ? 'als gemeinsam markiert' : 'als persoenlich markiert';
-        showToast(`${selectedTransactions.size} Transaktionen ${label}`, 'success');
+        const label = isShared ? 'als gemeinsam markiert' : 'als persönlich markiert';
+        const count = selectedTransactions.size;
         selectedTransactions.clear();
         updateBulkActions();
         loadTransactions();
+        showToast(`${count} Transaktionen ${label}`, 'success', {
+            undoCallback: () => undoBulkShared(snapshot)
+        });
     } catch (error) {
         showToast('Fehler: ' + error.message, 'error');
     }
@@ -471,12 +529,12 @@ function addSplitPart() {
     part.className = 'split-part';
     part.style.cssText = 'display: flex; gap: 12px; margin-bottom: 12px; align-items: center;';
     part.innerHTML = `
-        <input type="number" step="0.01" class="form-control split-amount" placeholder="Betrag" style="width: 120px;" oninput="updateSplitRemaining()">
+        <input type="number" step="0.01" class="form-control split-amount" placeholder="Betrag" style="width: 120px;" data-oninput="updateSplitRemaining">
         <select class="form-control split-category" style="flex: 1;">
             <option value="">Kategorie wählen</option>
             ${generateCategoryOptions(categories)}
         </select>
-        <button class="btn btn-icon btn-danger" onclick="this.parentElement.remove(); updateSplitRemaining();" title="Entfernen">
+        <button class="btn btn-icon btn-danger" data-action="removeSplitPart" title="Entfernen">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
                 <line x1="6" y1="6" x2="18" y2="18"></line>
