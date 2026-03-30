@@ -22,6 +22,7 @@ class Settings:
 
     # App
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
+    COOKIE_SECURE: bool = os.getenv("COOKIE_SECURE", "false").lower() == "true"
 
     # Rate Limiting
     RATE_LIMIT_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "100"))

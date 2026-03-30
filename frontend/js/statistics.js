@@ -208,23 +208,21 @@ function renderCategoryChart(data) {
             .time-chart {
                 display: flex;
                 align-items: flex-end;
-                height: 200px;
                 gap: 4px;
-                padding: 20px 0;
+                padding: 4px 0 0 0;
             }
             .time-bar-group {
                 flex: 1;
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-                height: 100%;
             }
             .time-bars {
-                flex: 1;
                 display: flex;
                 align-items: flex-end;
                 gap: 2px;
                 width: 100%;
+                height: 160px;
             }
             .time-bar {
                 flex: 1;

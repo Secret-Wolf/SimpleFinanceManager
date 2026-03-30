@@ -40,7 +40,7 @@ async function loadUserManagement() {
                                         <td>${formatDate(u.created_at)}</td>
                                         <td>
                                             <div class="flex gap-1">
-                                                <button class="btn btn-sm btn-secondary" onclick="showEditUserModal(${u.id})" title="Bearbeiten">
+                                                <button class="btn btn-sm btn-secondary" data-action="showEditUserModal" data-id="${u.id}" title="Bearbeiten">
                                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                                                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
@@ -48,12 +48,12 @@ async function loadUserManagement() {
                                                 </button>
                                                 ${u.id !== currentUser.id ? `
                                                     <button class="btn btn-sm ${u.is_admin ? 'btn-primary' : 'btn-secondary'}"
-                                                        onclick="toggleUserAdmin(${u.id}, ${u.is_admin})"
+                                                        data-action="toggleUserAdmin" data-id="${u.id}" data-value="${u.is_admin}"
                                                         title="${u.is_admin ? 'Admin-Rechte entziehen' : 'Zum Admin machen'}">
                                                         ${u.is_admin ? 'Admin' : 'User'}
                                                     </button>
                                                     <button class="btn btn-sm ${u.is_active ? 'btn-secondary' : 'btn-primary'}"
-                                                        onclick="toggleUserActive(${u.id}, ${u.is_active})"
+                                                        data-action="toggleUserActive" data-id="${u.id}" data-value="${u.is_active}"
                                                         title="${u.is_active ? 'Deaktivieren' : 'Aktivieren'}">
                                                         ${u.is_active ? 'Deaktivieren' : 'Aktivieren'}
                                                     </button>
