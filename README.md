@@ -1,6 +1,8 @@
 # Finanzmanager
 
-Eine selbst-gehostete Webanwendung zum Verwalten von Banktransaktionen. Importiere CSV-Exporte von deutschen Banken (Volksbank/Atruvia), kategorisiere Transaktionen und behalte den Überblick über deine Finanzen.
+Eine selbst-gehostete Webanwendung zum Verwalten von Banktransaktionen. Importiere CSV-Exporte deutscher Banken (Volksbank/Atruvia, ING), kategorisiere Transaktionen automatisch per Regeln und behalte – allein oder gemeinsam im Haushalt – den Überblick über deine Finanzen.
+
+Mehrbenutzerfähig mit Login, strikter Datentrennung pro Benutzer und gemeinsamen Haushalts-Auswertungen. Backend: FastAPI + SQLite. Frontend: schlankes Vanilla-JavaScript ohne Build-Schritt.
 
 ## Screenshots
 
@@ -25,16 +27,37 @@ Eine selbst-gehostete Webanwendung zum Verwalten von Banktransaktionen. Importie
 
 ## Features
 
-- **CSV-Import** - Drag & Drop Import von Volksbank/Atruvia CSV-Dateien
-- **Automatische Duplikaterkennung** - Bereits importierte Transaktionen werden übersprungen
-- **Kategorisierung** - Hierarchische Kategorien (2 Ebenen) mit Farbcodes und optionalem Monatsbudget
-- **Automatische Regeln** - Transaktionen automatisch kategorisieren lassen
-- **Splitbuchungen** - Eine Transaktion auf mehrere Kategorien aufteilen
-- **Notizen** - Eigene Notizen zu Transaktionen hinzufügen
-- **Dashboard** - Übersicht über Kontostand, Einnahmen/Ausgaben, Top-Kategorien
-- **Statistiken** - Ausgaben nach Kategorie, Zeitverläufe, CSV-Export
-- **Flexible Zeiträume** - Woche, Monat, Quartal, Jahr, "Seit letztem Gehalt" oder eigener Zeitraum
-- **Deutsches Format** - Beträge in 1.234,56 € Format
+### Transaktionen & Import
+- **CSV-Import** – Drag & Drop von Volksbank/Atruvia- und ING-Exporten, Format wird automatisch erkannt
+- **Automatische Duplikaterkennung** – Bereits importierte Buchungen werden übersprungen
+- **Mehrere Konten** – Buchungen werden automatisch dem Konto (per IBAN) zugeordnet, globaler Kontofilter
+- **Manuelle Einträge** – Bargeld, Geschenke o. Ä. ohne CSV erfassen
+- **Splitbuchungen** – Eine Transaktion auf mehrere Kategorien aufteilen
+- **Notizen** – Eigene Notizen zu Transaktionen
+- **CSV-Export** – Gefilterte Transaktionen als CSV (Excel-kompatibel) herunterladen
+
+### Kategorisierung
+- **Hierarchische Kategorien** (2 Ebenen) mit Farbcodes und optionalem Monatsbudget
+- **Automatische Regeln** – Buchungen nach Empfänger, IBAN, Verwendungszweck, Buchungsart oder Betrag kategorisieren; mit Priorität und Wildcard-/Regex-Mustern
+- **Bulk-Aktionen** – Mehrere Buchungen gleichzeitig kategorisieren oder als „gemeinsam" markieren
+
+### Auswertungen
+- **Dashboard** – Kontostand, Einnahmen/Ausgaben des Monats inkl. Vergleich zum Vormonat, Top-Ausgaben, Anzahl unkategorisierter Buchungen
+- **Statistiken** – Ausgaben nach Kategorie und Zeitverläufe
+- **Flexible Zeiträume** – Woche, Monat, letzter Monat, Quartal, Jahr, „Seit letztem Gehalt" oder eigener Zeitraum
+- **Deutsches Format** – Beträge als `1.234,56 €`, Daten als `TT.MM.JJJJ`
+
+### Mehrbenutzer & Haushalt
+- **Login & Benutzerverwaltung** – Erster registrierter Benutzer wird Admin; weitere Benutzer legt der Admin an
+- **Strikte Datentrennung** – Jeder Benutzer sieht nur seine eigenen Konten, Buchungen, Kategorien und Regeln
+- **Haushalte** – Benutzer per E-Mail einladen, gemeinsame Ausgaben markieren und über alle Haushaltsmitglieder hinweg auswerten (z. B. Kosten pro Person)
+- **Dark Mode** – Umschaltbar im Benutzerprofil
+
+### Sicherheit
+- JWT in HttpOnly-Cookies (Access- + Refresh-Token), Passwörter mit bcrypt gehasht
+- Passwort-Richtlinie (min. 12 Zeichen, Groß-/Kleinbuchstaben, Ziffer)
+- Rate-Limiting (allgemein + verschärft beim Login), strenge Security-Header & Content-Security-Policy
+- Strukturiertes Audit-Log sicherheitsrelevanter Ereignisse (`data/logs/audit.log`, IBANs maskiert)
 
 ## Installation
 
@@ -42,9 +65,11 @@ Eine selbst-gehostete Webanwendung zum Verwalten von Banktransaktionen. Importie
 
 #### Voraussetzungen
 - Docker
-- Docker Compose (optional, aber empfohlen)
+- Docker Compose
 
-#### Mit Docker Compose
+#### A) LAN-Betrieb ohne HTTPS
+
+Am einfachsten für den Heimgebrauch. Veröffentlicht den Port `8000` direkt.
 
 1. **Repository klonen:**
    ```bash
@@ -52,170 +77,154 @@ Eine selbst-gehostete Webanwendung zum Verwalten von Banktransaktionen. Importie
    cd SimpleFinanceManager
    ```
 
-2. **Datenverzeichnis vorbereiten:**
+2. **`SECRET_KEY` erzeugen** (einmalig, sicher aufbewahren):
    ```bash
-   mkdir -p data
-   # Falls du eine bestehende DB hast, kopiere sie nach data/finanzmanager.db
+   python -c "import secrets; print(secrets.token_urlsafe(64))"
    ```
 
 3. **Image bauen und starten:**
    ```bash
-   docker compose up -d
+   docker build -t finanzmanager:latest .
+   SECRET_KEY="dein-erzeugter-key" docker compose -f docker-compose.local.yml up -d
    ```
 
-4. **Im Browser öffnen:**
-   ```
-   http://localhost:8000
-   ```
+4. **Im Browser öffnen:** `http://<server-ip>:8000`
 
-#### Mit eigener Docker Registry
+#### B) Externer Zugriff mit automatischem HTTPS (Traefik)
 
-Falls du eine eigene Registry hast (z.B. `192.168.178.30:5000`):
+`docker-compose.yml` enthält einen Traefik-Reverse-Proxy mit Let's Encrypt. Vor dem Start anpassen:
+
+- In `docker-compose.yml` `finance.deinedomain.de` durch deine Domain ersetzen
+- `.env` anlegen (siehe unten) mit `SECRET_KEY`, `ACME_EMAIL`, `COOKIE_SECURE=true` und ggf. `ALLOWED_ORIGINS=https://deine-domain`
 
 ```bash
-# Image bauen
-docker build -t finanzmanager:latest .
-
-# Image taggen für Registry
-docker tag finanzmanager:latest 192.168.178.30:5000/finanzmanager:latest
-
-# In Registry pushen
-docker push 192.168.178.30:5000/finanzmanager:latest
-
-# Auf dem Zielserver: Container starten
 docker compose up -d
 ```
 
+Der App-Container wird dabei nur intern `expose`d und ist ausschließlich über Traefik erreichbar.
+
+#### Eigene Docker-Registry (optional)
+
+Hast du eine eigene Registry im Netzwerk (z. B. `192.168.178.30:5000`), kannst du das Image dorthin pushen und auf dem Zielserver nur noch ziehen. In `docker-compose.yml` / `docker-compose.local.yml` ist als `image` bereits eine solche Registry-Adresse hinterlegt – passe sie an deine an.
+
+```bash
+docker build -t finanzmanager:latest .
+docker tag finanzmanager:latest <registry-host>:5000/finanzmanager:latest
+docker push <registry-host>:5000/finanzmanager:latest
+
+# Auf dem Zielserver:
+docker compose pull && docker compose up -d
+```
+
+> Eine HTTP-Registry muss in der Docker-Daemon-Konfiguration (`/etc/docker/daemon.json`) als `insecure-registries` eingetragen sein.
+
 #### Bestehende Datenbank übernehmen
 
-Die Datenbank wird als Volume gemountet (`./data:/app/data`). Kopiere deine bestehende `finanzmanager.db` einfach in den `data/` Ordner, bevor du den Container startest.
+Die Datenbank wird als Volume gemountet (`./data:/app/data`). Kopiere deine vorhandene `finanzmanager.db` in den `data/`-Ordner, bevor du den Container startest. Schema-Migrationen laufen beim Start automatisch.
 
 ---
 
 ### Option 2: Lokale Installation
 
 #### Voraussetzungen
-
 - Python 3.10 oder höher
-- pip (Python Package Manager)
+- pip
 
 #### Setup
 
-1. **Repository klonen:**
-   ```bash
-   git clone https://github.com/Secret-Wolf/SimpleFinanceManager.git
-   cd SimpleFinanceManager
-   ```
+```bash
+git clone https://github.com/Secret-Wolf/SimpleFinanceManager.git
+cd SimpleFinanceManager/backend
 
-2. **In das Backend-Verzeichnis wechseln:**
-   ```bash
-   cd backend
-   ```
+python -m venv venv
+# Windows:
+venv\Scripts\activate
+# Linux/Mac:
+source venv/bin/activate
 
-3. **Virtuelle Umgebung erstellen (empfohlen):**
-   ```bash
-   python -m venv venv
+pip install -r requirements.txt
+python run.py
+```
 
-   # Windows:
-   venv\Scripts\activate
+Im Browser öffnen: `http://localhost:8000`
 
-   # Linux/Mac:
-   source venv/bin/activate
-   ```
+> Ohne gesetztes `SECRET_KEY` wird beim ersten Start automatisch ein Schlüssel erzeugt und in `data/.secret_key` gespeichert (bleibt über Neustarts stabil). Für `DEBUG=true` (Auto-Reload + API-Dokumentation) die Umgebungsvariable vor dem Start setzen.
 
-4. **Abhängigkeiten installieren:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+## Konfiguration (Umgebungsvariablen)
 
-5. **Server starten:**
-   ```bash
-   python run.py
-   ```
+Für Docker eine `.env` neben der `docker-compose.yml` anlegen (Vorlage: [`.env.example`](.env.example)):
 
-6. **Im Browser öffnen:**
-   ```
-   http://localhost:8000
-   ```
+| Variable | Standard | Beschreibung |
+|----------|----------|--------------|
+| `SECRET_KEY` | *(auto)* | JWT-Signaturschlüssel. In Production zwingend setzen. Wird sonst erzeugt und in `data/.secret_key` persistiert. |
+| `DEBUG` | `false` | Auto-Reload und API-Docs unter `/api/docs`. In Production immer `false`. |
+| `COOKIE_SECURE` | `false` | Auf `true` setzen, wenn die App hinter HTTPS läuft. |
+| `ALLOWED_ORIGINS` | *(leer)* | Komma-separierte CORS-Origins. Leer = same-origin (LAN-Standard). |
+| `ACME_EMAIL` | – | E-Mail für Let's Encrypt (nur Traefik). |
+| `RATE_LIMIT_PER_MINUTE` | `100` | Allgemeines Anfrage-Limit pro IP. |
+| `LOGIN_RATE_LIMIT_PER_MINUTE` | `5` | Limit für Login/Registrierung pro IP. |
+| `MAX_UPLOAD_SIZE_MB` | `10` | Maximale Größe einer CSV-Datei. |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `30` | Gültigkeit des Access-Tokens. |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | `7` | Gültigkeit des Refresh-Tokens. |
 
 ## Verwendung
 
 ### Erster Start
 
-Beim ersten Start werden automatisch Standardkategorien erstellt. Falls nicht, klicke auf "Standardkategorien erstellen" in der Kategorieverwaltung.
+Beim ersten Aufruf erscheint die **Ersteinrichtung**: Lege das erste Benutzerkonto an – dieser Benutzer wird automatisch **Administrator**. Anschließend werden Standardkategorien erstellt. Weitere Benutzer können nur vom Admin unter **Benutzer** angelegt werden.
 
 ### CSV importieren
 
 1. Gehe zu **Import** in der Seitenleiste
-2. Ziehe deine CSV-Datei in den Upload-Bereich (oder klicke zum Auswählen)
-3. Der Import zeigt an:
-   - Anzahl neu importierter Transaktionen
-   - Anzahl übersprungener Duplikate
-   - Eventuelle Fehler
+2. Wähle optional das Bankformat (Standard: automatisch erkennen)
+3. Ziehe deine CSV-Datei in den Upload-Bereich (oder klicke zum Auswählen)
+4. Das Ergebnis zeigt: neu importiert, übersprungene Duplikate und eventuelle Fehler. Neue Buchungen werden direkt anhand deiner Regeln kategorisiert.
 
 ### Transaktionen kategorisieren
 
-**Manuell:**
-- In der Transaktionsliste direkt die Kategorie per Dropdown ändern
+- **Manuell:** In der Transaktionsliste die Kategorie per Dropdown ändern
+- **Per Regel (automatisch):** Transaktion öffnen → „Regel erstellen", Kriterium (Empfängername, IBAN, …) und Kategorie wählen. Alle künftigen Importe werden automatisch zugeordnet.
+- **Bulk:** Mehrere Buchungen per Checkbox auswählen und gemeinsam einer Kategorie zuweisen
 
-**Per Regel (automatisch):**
-1. Klicke auf eine Transaktion → Details → "Regel erstellen"
-2. Wähle das Matching-Kriterium (Empfängername, IBAN, etc.)
-3. Wähle die Kategorie
-4. Alle zukünftigen Imports werden automatisch kategorisiert
-
-**Bulk-Kategorisierung:**
-1. Mehrere Transaktionen mit Checkbox auswählen
-2. Kategorie wählen und "Kategorie zuweisen" klicken
-
-### Regeln anwenden
-
-Unter **Regeln** → "Regeln anwenden" werden alle aktiven Regeln auf unkategorisierte Transaktionen angewendet.
+Unter **Regeln** → „Regeln anwenden" werden alle aktiven Regeln auf unkategorisierte (optional auch bereits kategorisierte) Buchungen angewendet. Regel-Muster unterstützen einfaches Enthalten, Wildcards (`*` / `%`) und Regex (`/muster/i`).
 
 ### Splitbuchungen
 
-Für Transaktionen, die mehrere Kategorien betreffen (z.B. Supermarkteinkauf mit Haushaltswaren):
+Für Buchungen, die mehrere Kategorien betreffen (z. B. Supermarkteinkauf inkl. Haushaltswaren):
 
-1. Transaktion anklicken → Details
-2. "Aufteilen" klicken
-3. Beträge und Kategorien für jeden Teil eingeben
-4. Die Summe muss dem Originalbetrag entsprechen
+1. Transaktion öffnen → „Aufteilen"
+2. Beträge und Kategorien je Teil eingeben (die Summe muss dem Originalbetrag entsprechen)
+
+### Haushalt & gemeinsame Ausgaben
+
+1. Unter **Haushalt** einen Haushalt anlegen und Mitglieder per E-Mail einladen (eingeladene Person muss ein Konto haben und die Einladung annehmen)
+2. Gemeinsame Buchungen über die Detailansicht oder per Bulk-Aktion als „gemeinsam" markieren – Regeln können das ebenfalls automatisch setzen
+3. Das Dashboard und die Haushalts-Auswertung zeigen gemeinsame Ausgaben sowie den Anteil pro Person
 
 ### Statistiken
 
-Die Statistik-Seite bietet verschiedene Zeiträume:
-- **Dieser Monat / Letzter Monat** - Monatsübersicht
-- **Dieses Quartal / Dieses Jahr** - Längere Zeiträume
-- **Seit letztem Gehalt** - Automatische Erkennung des letzten Gehaltseingangs
-- **Eigener Zeitraum** - Frei wählbarer Start- und Endzeitraum
+Verschiedene Zeiträume: dieser/letzter Monat, Quartal, Jahr, **„Seit letztem Gehalt"** (erkennt den letzten Gehaltseingang über die Kategorie *Gehalt* bzw. Schlüsselwörter) oder ein eigener Zeitraum.
 
 ## Tastaturkürzel
 
 | Taste | Funktion |
 |-------|----------|
 | `i` | Import-Seite öffnen |
-| `f` | Suchfeld fokussieren (auf Transaktionsseite) |
+| `f` | Suchfeld fokussieren (auf der Transaktionsseite) |
 | `Esc` | Modal schließen |
 
 ## Datenbank
 
-Die Datenbank ist eine SQLite-Datei unter:
-```
-data/finanzmanager.db
-```
+Die Datenbank ist eine SQLite-Datei unter `data/finanzmanager.db`.
 
-### Backup
+- **Backup:** Einfach die Datei `finanzmanager.db` kopieren. Fertig.
+- **Zurücksetzen:** Datenbank löschen und Server neu starten:
+  ```bash
+  del data\finanzmanager.db   # Windows
+  rm data/finanzmanager.db    # Linux/Mac
+  ```
 
-Einfach die Datei `finanzmanager.db` kopieren. Fertig!
-
-### Zurücksetzen
-
-Datenbank löschen und Server neu starten:
-```bash
-del data\finanzmanager.db   # Windows
-rm data/finanzmanager.db    # Linux/Mac
-python run.py
-```
+Schemaänderungen werden beim Start automatisch über eingebaute Migrationen angewendet – eine alte DB wird also weiterverwendet, nicht überschrieben.
 
 ## Projektstruktur
 
@@ -223,74 +232,59 @@ python run.py
 SimpleFinanceManager/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py           # FastAPI App
-│   │   ├── database.py       # SQLite Verbindung
+│   │   ├── main.py           # FastAPI-App, Static-Hosting, Security-Header
+│   │   ├── config.py         # Konfiguration via Environment Variables
+│   │   ├── database.py       # SQLite-Verbindung (SQLAlchemy)
 │   │   ├── models.py         # Datenbank-Modelle
-│   │   ├── schemas.py        # API-Schemas
-│   │   ├── routers/          # API-Endpunkte
-│   │   └── services/         # Business-Logik
+│   │   ├── migrations.py     # Idempotente Schema-Migrationen (beim Start)
+│   │   ├── schemas.py        # Pydantic-Schemas / Validierung
+│   │   ├── auth.py           # JWT, Cookies, Passwort-Hashing
+│   │   ├── audit.py          # Strukturiertes Audit-Logging
+│   │   ├── routers/          # API-Endpunkte (auth, transactions, categories,
+│   │   │                     #   rules, imports, stats, accounts, households)
+│   │   └── services/         # Business-Logik (csv_parser, categorizer, statistics)
 │   ├── requirements.txt
-│   └── run.py                # Startskript
-├── frontend/
+│   └── run.py                # Startskript (uvicorn)
+├── frontend/                 # Vanilla-JS-SPA (kein Build-Schritt)
 │   ├── index.html
 │   ├── css/style.css
-│   └── js/                   # JavaScript-Module
+│   └── js/                   # api, auth, app, transactions, … (globale Module)
 ├── data/
-│   └── finanzmanager.db      # SQLite Datenbank
-├── Bilder/                   # Screenshots
-└── README.md
+│   └── finanzmanager.db      # SQLite-Datenbank (Volume)
+├── Dockerfile
+├── docker-compose.yml        # Production (Traefik + HTTPS)
+├── docker-compose.local.yml  # LAN-Betrieb ohne HTTPS
+└── Bilder/                   # Screenshots
 ```
 
 ## Unterstützte CSV-Formate
 
-Aktuell wird das **Volksbank/Atruvia**-Format unterstützt. Der CSV-Parser kann leicht für andere Banken erweitert werden - siehe `backend/app/services/csv_parser.py`.
+Das Format wird beim Import automatisch anhand der Kopfzeile erkannt. Weitere Banken lassen sich in [`backend/app/services/csv_parser.py`](backend/app/services/csv_parser.py) ergänzen.
 
 ### Volksbank / Atruvia
+Semikolon-getrennt, UTF-8 (mit BOM). Relevante Spalten: Buchungstag (`TT.MM.JJJJ`), Name/IBAN/BIC Zahlungsbeteiligter, Buchungstext, Verwendungszweck, Betrag (`-123,45`), Saldo nach Buchung, Kategorie, Gläubiger-ID, Mandatsreferenz u. a.
 
-Semikolon-getrennt, UTF-8 (mit BOM). Spalten:
-
-- Bezeichnung Auftragskonto
-- IBAN Auftragskonto
-- BIC Auftragskonto
-- Bankname Auftragskonto
-- Buchungstag (DD.MM.YYYY)
-- Valutadatum
-- Name Zahlungsbeteiligter
-- IBAN Zahlungsbeteiligter
-- BIC (SWIFT-Code) Zahlungsbeteiligter
-- Buchungstext
-- Verwendungszweck
-- Betrag (-123,45)
-- Waehrung
-- Saldo nach Buchung
-- Kategorie
-- Glaeubiger ID
-- Mandatsreferenz
+### ING
+Semikolon-getrennt. Kontodaten (IBAN, Kontoname, Bank) stehen im Kopfbereich; die Buchungstabelle beginnt ab der Spaltenzeile `Buchung;Wertstellungsdatum;…`.
 
 ## API-Dokumentation
 
-Die API-Dokumentation ist verfügbar unter:
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+Nur bei `DEBUG=true` aktiv:
+- Swagger UI: `http://localhost:8000/api/docs`
+- ReDoc: `http://localhost:8000/api/redoc`
+
+Health-Check (immer erreichbar, ohne Auth): `http://localhost:8000/api/health`
 
 ## Troubleshooting
 
-### "Port already in use"
+**„Port already in use"** – Ein anderer Prozess nutzt Port 8000. Prozess beenden oder den Port anpassen (`backend/run.py` bzw. Compose-Datei).
 
-Ein anderer Prozess nutzt Port 8000. Entweder:
-- Den anderen Prozess beenden
-- Oder in `run.py` den Port ändern
+**Import schlägt fehl** – Prüfe, ob die Datei eine `.csv` im Volksbank- oder ING-Format ist. Das Encoding wird automatisch erkannt (UTF-8 mit/ohne BOM, Latin-1, CP1252).
 
-### Import schlägt fehl
+**Kategorien werden nicht angezeigt** – Auf der Kategorien-Seite „Standardkategorien erstellen" klicken. Kategorien sind benutzergebunden – jeder Benutzer hat seine eigenen.
 
-- Prüfe, ob die CSV-Datei im Volksbank-Format ist
-- Datei muss `.csv` Endung haben
-- Encoding sollte UTF-8 sein (mit oder ohne BOM)
-
-### Kategorien werden nicht angezeigt
-
-Auf der Kategorien-Seite "Standardkategorien erstellen" klicken.
+**Login nicht möglich / Sitzung läuft ständig ab** – Hinter HTTPS muss `COOKIE_SECURE=true` gesetzt sein; ohne HTTPS muss es `false` sein, sonst werden die Auth-Cookies verworfen.
 
 ## Lizenz
 
-MIT License - siehe [LICENSE](LICENSE) für Details.
+MIT License – siehe [LICENSE](LICENSE) für Details.
