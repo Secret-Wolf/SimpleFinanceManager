@@ -160,7 +160,7 @@ async function loadDashboard() {
 
         container.innerHTML = `
             <div class="stats-grid">
-                <div class="stat-card">
+                <div class="stat-card balance-hero">
                     <div class="label">Kontostand</div>
                     <div class="value ${summary.current_balance >= 0 ? 'positive' : 'negative'}">
                         ${summary.current_balance !== null ? formatCurrency(summary.current_balance) : '-'}

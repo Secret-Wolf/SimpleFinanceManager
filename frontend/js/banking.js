@@ -37,24 +37,22 @@ async function loadBanking() {
         container.innerHTML = `
             <div class="accounts-grid">
                 ${connections.map(c => `
-                    <div class="card account-card" style="cursor: default;">
-                        <div class="account-header">
-                            <div class="account-bank">
-                                <span class="bank-icon">${getBankIcon(c.name)}</span>
-                                <span class="account-name" style="margin-bottom: 0;">${escapeHtml(c.name)}</span>
-                            </div>
-                            <span class="account-type-badge">FinTS</span>
+                    <div class="card bank-conn-card">
+                        <div class="conn-top">
+                            <span class="bank-icon">${getBankIcon(c.name)}</span>
+                            <span class="conn-name">${escapeHtml(c.name)}</span>
+                            <span class="conn-badge">FinTS</span>
                         </div>
-                        <div class="account-iban">BLZ ${escapeHtml(c.bank_code)} · ${escapeHtml(c.login_name)}</div>
-                        <div class="account-stats">
-                            <div class="account-stat">
-                                <span class="stat-label">Letzter Abruf</span>
-                                <span class="stat-value">${c.last_sync ? escapeHtml(formatDate(c.last_sync)) : 'nie'}</span>
+                        <div class="conn-meta">BLZ ${escapeHtml(c.bank_code)} · ${escapeHtml(c.login_name)}</div>
+                        <div class="conn-foot">
+                            <div class="conn-lastsync">
+                                <span class="conn-lastsync-label">Letzter Abruf</span>
+                                ${c.last_sync ? escapeHtml(formatDate(c.last_sync)) : 'nie'}
                             </div>
-                        </div>
-                        <div class="card-actions">
-                            <button class="btn btn-primary btn-sm" data-action="startBankSync" data-id="${c.id}">Umsätze abrufen</button>
-                            <button class="btn btn-secondary btn-sm" data-action="deleteBankConnectionConfirm" data-id="${c.id}" data-value="${escapeHtml(c.name)}">Löschen</button>
+                            <div class="card-actions">
+                                <button class="btn btn-primary btn-sm" data-action="startBankSync" data-id="${c.id}">Umsätze abrufen</button>
+                                <button class="btn btn-secondary btn-sm" data-action="deleteBankConnectionConfirm" data-id="${c.id}" data-value="${escapeHtml(c.name)}">Löschen</button>
+                            </div>
                         </div>
                     </div>
                 `).join('')}

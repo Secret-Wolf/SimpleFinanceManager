@@ -49,11 +49,15 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
 
-    # CSP - no unsafe-inline (frontend uses event delegation instead)
+    # CSP - scripts stay strict (no inline JS; frontend uses event delegation).
+    # Inline *style attributes* are allowed (style-src-attr) because the SPA sets dynamic
+    # styles/colors via style="..."; this does not relax script execution. Inline <style>
+    # blocks and external styles/fonts remain restricted to 'self'.
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "script-src 'self'; "
         "style-src 'self'; "
+        "style-src-attr 'unsafe-inline'; "
         "img-src 'self' data:; "
         "font-src 'self'; "
         "connect-src 'self'; "

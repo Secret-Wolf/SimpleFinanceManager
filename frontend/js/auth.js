@@ -303,17 +303,39 @@ async function exportTransactions() {
     }
 }
 
-// Dark Mode
+// Dark Mode — default follows the OS; a manual toggle stores an explicit override.
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+}
+
+function systemPrefersDark() {
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+function effectiveTheme() {
+    const saved = localStorage.getItem('theme'); // 'light' | 'dark' | null (=> follow system)
+    if (saved === 'light' || saved === 'dark') return saved;
+    return systemPrefersDark() ? 'dark' : 'light';
+}
+
 function toggleDarkMode() {
     const isDark = document.getElementById('dark-mode-toggle').checked;
     const theme = isDark ? 'dark' : 'light';
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
+    applyTheme(theme);
+    localStorage.setItem('theme', theme); // explicit user override
 }
 
 function initTheme() {
-    const savedTheme = localStorage.getItem('theme') || 'light';
-    document.documentElement.setAttribute('data-theme', savedTheme);
+    applyTheme(effectiveTheme());
+    // While following the system (no explicit override), react to OS theme changes live.
+    if (window.matchMedia) {
+        const mq = window.matchMedia('(prefers-color-scheme: dark)');
+        const onChange = () => {
+            if (!localStorage.getItem('theme')) applyTheme(systemPrefersDark() ? 'dark' : 'light');
+        };
+        if (mq.addEventListener) mq.addEventListener('change', onChange);
+        else if (mq.addListener) mq.addListener(onChange); // older browsers
+    }
 }
 
 // Initialize theme immediately (before DOM ready)
