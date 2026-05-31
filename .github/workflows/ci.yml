@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    name: Lint, test & security scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements-dev.txt
+
+      - name: Lint (ruff)
+        run: ruff check backend
+
+      - name: Tests (pytest)
+        run: pytest
+
+      - name: Security static analysis (bandit)
+        run: bandit -r backend/app
+
+      - name: Dependency CVE audit (pip-audit)
+        # PYSEC-2026-87: lxml advisory pulled transitively via `fints` (pinned lxml~=6.0.2).
+        # Not fixable until python-fints loosens its pin; lxml only parses bank responses
+        # over HTTPS here, not arbitrary input. Tracked in SECURITY.md.
+        run: pip-audit -r backend/requirements.txt --ignore-vuln PYSEC-2026-87

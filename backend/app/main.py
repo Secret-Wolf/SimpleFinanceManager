@@ -1,16 +1,17 @@
+import os
+
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-import os
+from slowapi.util import get_remote_address
 
 from .config import settings
 from .database import init_db
 from .migrations import run_migrations
-from .routers import transactions, categories, rules, imports, stats, accounts, auth, households, banking
+from .routers import accounts, auth, banking, categories, households, imports, rules, stats, transactions
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address, default_limits=[f"{settings.RATE_LIMIT_PER_MINUTE}/minute"])

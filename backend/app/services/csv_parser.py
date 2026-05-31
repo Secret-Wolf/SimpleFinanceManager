@@ -3,12 +3,12 @@ import hashlib
 import io
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-from typing import List, Dict, Tuple, Optional
-from sqlalchemy.orm import Session
+from typing import Dict, List, Optional
+
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
-from ..models import Transaction, Account, Import
-
+from ..models import Account, Import, Transaction
 
 # Supported bank formats
 SUPPORTED_FORMATS = ["auto", "volksbank", "ing"]
@@ -317,7 +317,7 @@ def import_csv(db: Session, content: str, filename: str = None, bank_format: str
                 if account:
                     account = db.query(Account).filter(Account.id == account.id).first()
 
-        except Exception as e:
+        except Exception:
             db.rollback()
             error_count += 1
             # Re-fetch account after rollback

@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import func
-from typing import Optional, List
+from typing import List, Optional
 
-from ..database import get_db
-from ..auth import get_current_user
-from ..models import Category, Transaction, User
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
 from .. import schemas
+from ..auth import get_current_user
+from ..database import get_db
+from ..models import Category, Transaction, User
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
 

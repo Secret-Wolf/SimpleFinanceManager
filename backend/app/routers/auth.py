@@ -1,13 +1,14 @@
 """Authentication endpoints"""
 
+from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
-from ..config import settings as app_settings
-
-from ..audit import log_auth_event, log_security_event
+from .. import schemas
+from ..audit import log_auth_event
 from ..auth import (
     clear_auth_cookies,
     get_current_admin,
@@ -17,10 +18,9 @@ from ..auth import (
     validate_refresh_token,
     verify_password,
 )
+from ..config import settings as app_settings
 from ..database import get_db
-from ..models import User, Account, Category, CategorizationRule
-from .. import schemas
-from typing import List
+from ..models import Account, CategorizationRule, Category, User
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 limiter = Limiter(key_func=get_remote_address)

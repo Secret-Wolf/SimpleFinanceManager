@@ -199,8 +199,8 @@ async function loadDashboard() {
                             <div class="category-list">
                                 ${summary.top_categories.map(cat => `
                                     <div class="category-item">
-                                        <div class="color-dot" style="background-color: ${cat.category_color || '#888'}"></div>
-                                        <span class="name">${cat.category_name}</span>
+                                        <div class="color-dot" style="background-color: ${safeColor(cat.category_color)}"></div>
+                                        <span class="name">${escapeHtml(cat.category_name)}</span>
                                         <span class="amount negative">${formatCurrency(cat.total)}</span>
                                     </div>
                                 `).join('')}
@@ -230,12 +230,12 @@ async function loadDashboard() {
                                         ${summary.recent_transactions.map(tx => `
                                             <tr>
                                                 <td>${formatDate(tx.booking_date)}</td>
-                                                <td>${truncate(tx.counterpart_name || tx.booking_type || '-', 30)}</td>
+                                                <td>${escapeHtml(truncate(tx.counterpart_name || tx.booking_type || '-', 30))}</td>
                                                 <td>
                                                     ${tx.category ? `
                                                         <span class="category-badge">
-                                                            <span class="dot" style="background-color: ${tx.category.color || '#888'}"></span>
-                                                            ${tx.category.name}
+                                                            <span class="dot" style="background-color: ${safeColor(tx.category.color)}"></span>
+                                                            ${escapeHtml(tx.category.name)}
                                                         </span>
                                                     ` : '<span class="category-badge uncategorized">Unkategorisiert</span>'}
                                                 </td>

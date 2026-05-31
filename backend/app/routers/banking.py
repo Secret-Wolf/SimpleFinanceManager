@@ -1,18 +1,23 @@
 """Online-banking (FinTS/HBCI) endpoints — read-only balance & transaction retrieval."""
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 from typing import List
 
+from fastapi import APIRouter, Depends, HTTPException, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from sqlalchemy.orm import Session
+
+from .. import schemas
 from ..audit import log_data_event
-from ..database import get_db
 from ..auth import get_current_user
+from ..config import settings as app_settings
+from ..database import get_db
 from ..models import BankConnection, User
 from ..services import fints_service
 from ..services.fints_service import BankingError
-from .. import schemas
 
 router = APIRouter(prefix="/api/banking", tags=["banking"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 def _get_owned_connection(connection_id: int, user: User, db: Session) -> BankConnection:
@@ -67,7 +72,9 @@ def delete_connection(connection_id: int, db: Session = Depends(get_db), current
 
 
 @router.post("/connections/{connection_id}/sync", response_model=schemas.SyncResult)
+@limiter.limit(f"{app_settings.BANKING_SYNC_RATE_LIMIT_PER_MINUTE}/minute")
 def sync_connection(
+    request: Request,
     connection_id: int,
     data: schemas.SyncRequest,
     db: Session = Depends(get_db),

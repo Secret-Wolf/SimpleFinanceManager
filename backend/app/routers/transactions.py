@@ -1,25 +1,36 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import and_, or_, func
-from typing import Optional, List
+import csv
+import hashlib
+import io
+import logging
+import uuid
 from datetime import date
 from decimal import Decimal
-import hashlib
-import uuid
-import logging
-import csv
-import io
+from typing import List, Optional
 
-from ..audit import log_data_event
-from ..database import get_db
-from ..auth import get_current_user
-from ..models import Transaction, Category, Account, User
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
+from sqlalchemy import or_
+from sqlalchemy.orm import Session, joinedload
+
 from .. import schemas
+from ..audit import log_data_event
+from ..auth import get_current_user
+from ..database import get_db
+from ..models import Account, Category, Transaction, User
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
+
+
+def _csv_safe(value) -> str:
+    """Neutralize CSV/formula injection: cells starting with = + - @ (or a control char)
+    get a leading apostrophe so spreadsheet apps don't execute them as formulas.
+    Note: only for text cells — never apply to numeric amounts (they can start with '-')."""
+    s = "" if value is None else str(value)
+    if s and s[0] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + s
+    return s
 
 
 @router.get("", response_model=schemas.TransactionList)
@@ -174,19 +185,19 @@ def export_transactions(
         writer.writerow([
             tx.booking_date.isoformat() if tx.booking_date else '',
             tx.value_date.isoformat() if tx.value_date else '',
-            tx.counterpart_name or '',
-            tx.counterpart_iban or '',
-            tx.counterpart_bic or '',
-            tx.booking_type or '',
-            tx.purpose or '',
+            _csv_safe(tx.counterpart_name),
+            _csv_safe(tx.counterpart_iban),
+            _csv_safe(tx.counterpart_bic),
+            _csv_safe(tx.booking_type),
+            _csv_safe(tx.purpose),
             str(tx.amount) if tx.amount is not None else '',
             tx.currency or 'EUR',
             str(tx.balance_after) if tx.balance_after is not None else '',
-            cat_name,
-            tx.account_name or '',
-            tx.bank_name or '',
+            _csv_safe(cat_name),
+            _csv_safe(tx.account_name),
+            _csv_safe(tx.bank_name),
             'Ja' if tx.is_shared else 'Nein',
-            tx.notes or ''
+            _csv_safe(tx.notes)
         ])
 
     csv_content = output.getvalue()

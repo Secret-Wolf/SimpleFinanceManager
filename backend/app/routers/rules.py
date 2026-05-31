@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session, joinedload
 from typing import List
 
-from ..database import get_db
-from ..auth import get_current_user
-from ..models import CategorizationRule, Category, Transaction, User
-from ..services.categorizer import apply_rules_to_uncategorized, apply_rules_to_all, create_rule_from_transaction
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session, joinedload
+
 from .. import schemas
+from ..auth import get_current_user
+from ..database import get_db
+from ..models import CategorizationRule, Category, Transaction, User
+from ..services.categorizer import apply_rules_to_all, apply_rules_to_uncategorized, create_rule_from_transaction
 
 router = APIRouter(prefix="/api/rules", tags=["rules"])
 
@@ -184,9 +185,9 @@ def apply_rules(
     """Apply all rules to transactions.
     If overwrite=True, re-categorizes already categorized transactions too."""
     if overwrite:
-        count = apply_rules_to_all(db)
+        count = apply_rules_to_all(db, current_user.id)
     else:
-        count = apply_rules_to_uncategorized(db)
+        count = apply_rules_to_uncategorized(db, current_user.id)
 
     return {
         "message": f"{count} Transaktionen kategorisiert",

@@ -19,17 +19,16 @@ import threading
 import time
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
+from fints.client import FinTS3PinTanClient, NeedRetryResponse, NeedTANResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from fints.client import FinTS3PinTanClient, NeedTANResponse, NeedRetryResponse
-
 from ..config import settings
-from ..models import BankConnection, Transaction, Import
-from .csv_parser import ensure_account_exists, generate_import_hash
+from ..models import BankConnection, Import, Transaction
 from .categorizer import apply_rules_to_uncategorized
+from .csv_parser import ensure_account_exists, generate_import_hash
 
 logger = logging.getLogger(__name__)
 
@@ -145,13 +144,13 @@ def _bootstrap_tan(client: FinTS3PinTanClient, connection: BankConnection):
     except Exception as e:
         logger.info("Connection %s: TAN media selection skipped (%s)", connection.id, e)
 
-    # Persist the chosen method on the connection (best effort)
+    # Persist the chosen method on the connection (best effort — purely informational)
     try:
         if client.selected_security_function:
             connection.tan_mechanism = str(client.selected_security_function)
         if client.selected_tan_medium:
             connection.tan_medium = str(client.selected_tan_medium)
-    except Exception:
+    except Exception:  # nosec B110 - informational only; must never block a sync
         pass
 
 
@@ -287,7 +286,7 @@ def _import_statements(db: Session, connection: BankConnection, statements, user
     db.commit()
 
     if new > 0:
-        apply_rules_to_uncategorized(db)
+        apply_rules_to_uncategorized(db, user_id)
 
     return {"imported": new, "duplicates": dup, "errors": err, "accounts": account_ibans}
 
@@ -345,7 +344,7 @@ def _attach_code_recorder(client: FinTS3PinTanClient) -> list:
             code = getattr(response, "code", None)
             if code:
                 codes.append((str(code), (getattr(response, "text", "") or "")[:140]))
-        except Exception:
+        except Exception:  # nosec B110 - diagnostics only; never disturb the real response flow
             pass
         return orig(dialog, segment, response)
 
@@ -414,7 +413,7 @@ def start_sync(db: Session, connection: BankConnection, pin: str, from_date: Opt
     except Exception as e:
         logger.warning("FinTS start_sync failed for connection %s: %s | bank codes: %s",
                        connection.id, e, _format_codes(codes))
-        raise BankingError(_friendly_error(e, codes))
+        raise BankingError(_friendly_error(e, codes)) from e
 
 
 def resume_sync(db: Session, connection: BankConnection, token: str, tan: Optional[str]) -> dict:
@@ -482,7 +481,7 @@ def resume_sync(db: Session, connection: BankConnection, token: str, tan: Option
         logger.warning("FinTS resume_sync failed for connection %s: %s | bank codes: %s",
                        connection.id, e, _format_codes(codes))
         _drop_pending(token)
-        raise BankingError(_friendly_error(e, codes))
+        raise BankingError(_friendly_error(e, codes)) from e
 
 
 def _friendly_error(e: Exception, codes: Optional[list] = None) -> str:

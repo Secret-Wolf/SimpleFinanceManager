@@ -45,7 +45,7 @@ async function loadRules() {
                                 <td>
                                     ${rule.category ? `
                                         <span class="category-badge">
-                                            <span class="dot" style="background-color: ${rule.category.color || '#888'}"></span>
+                                            <span class="dot" style="background-color: ${safeColor(rule.category.color)}"></span>
                                             ${escapeHtml(rule.category.name)}
                                         </span>
                                     ` : '-'}

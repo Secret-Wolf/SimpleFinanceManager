@@ -30,6 +30,8 @@ class Settings:
     # Rate Limiting
     RATE_LIMIT_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "100"))
     LOGIN_RATE_LIMIT_PER_MINUTE: int = int(os.getenv("LOGIN_RATE_LIMIT_PER_MINUTE", "5"))
+    # FinTS sync carries the banking PIN; limit it (but NOT the /tan poll, which is frequent)
+    BANKING_SYNC_RATE_LIMIT_PER_MINUTE: int = int(os.getenv("BANKING_SYNC_RATE_LIMIT_PER_MINUTE", "10"))
 
     # Upload
     MAX_UPLOAD_SIZE_MB: int = int(os.getenv("MAX_UPLOAD_SIZE_MB", "10"))

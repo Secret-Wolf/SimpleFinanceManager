@@ -843,6 +843,7 @@ select.form-control {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 8px;
     margin-bottom: 12px;
 }
 
@@ -850,15 +851,22 @@ select.form-control {
     display: flex;
     align-items: center;
     gap: 8px;
+    min-width: 0; /* allow the bank name to shrink/ellipsis instead of overflowing */
+    flex: 1 1 auto;
 }
 
 .bank-icon {
     font-size: 1.25rem;
+    flex-shrink: 0;
 }
 
 .bank-name {
     font-size: 0.875rem;
     color: var(--text-secondary);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .account-type-badge {
@@ -867,12 +875,15 @@ select.form-control {
     background-color: var(--bg-secondary);
     border-radius: var(--radius-sm);
     color: var(--text-secondary);
+    flex-shrink: 0; /* keep "BLZ 12345678" / "Girokonto" on one line */
+    white-space: nowrap;
 }
 
 .account-name {
     font-size: 1.125rem;
     font-weight: 600;
     margin-bottom: 4px;
+    overflow-wrap: anywhere; /* long names wrap instead of clipping */
 }
 
 .account-iban {
@@ -880,6 +891,7 @@ select.form-control {
     font-size: 0.8rem;
     color: var(--text-secondary);
     margin-bottom: 16px;
+    overflow-wrap: anywhere; /* formatted IBAN wraps cleanly on narrow cards */
 }
 
 .account-balance {
@@ -898,6 +910,7 @@ select.form-control {
 
 .account-stats {
     display: flex;
+    flex-wrap: wrap;
     gap: 16px;
     padding-top: 12px;
     border-top: 1px solid var(--border-color);
@@ -926,6 +939,14 @@ select.form-control {
 
 .account-stat .stat-value.negative {
     color: var(--danger-color);
+}
+
+/* Card action button row (responsive) */
+.card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
 }
 
 /* Shared Badge */

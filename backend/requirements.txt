@@ -1,11 +1,12 @@
-fastapi>=0.115.0
-uvicorn[standard]>=0.34.0
-sqlalchemy>=2.0.36
-pydantic>=2.10.0
-python-multipart>=0.0.18
+# Runtime dependencies (pinned for reproducibility; CI runs pip-audit to flag CVEs).
+fastapi==0.136.3
+uvicorn[standard]==0.48.0
+sqlalchemy==2.0.50
+pydantic==2.13.4
+python-multipart==0.0.29
 aiofiles==23.2.1
 python-dateutil==2.8.2
-PyJWT>=2.9.0
-bcrypt>=4.2.0
+PyJWT==2.13.0
+bcrypt==5.0.0
 slowapi==0.1.9
-fints>=4.2.0
+fints==5.0.0

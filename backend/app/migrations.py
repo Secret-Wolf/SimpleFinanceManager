@@ -1,9 +1,11 @@
 # Database migrations for schema updates
 # This module handles adding new columns/tables to existing databases
 
-from sqlalchemy import text, inspect
-from .database import engine
 import logging
+
+from sqlalchemy import inspect, text
+
+from .database import engine
 
 logger = logging.getLogger(__name__)
 
@@ -203,8 +205,9 @@ def run_migrations():
                 if table_name in inspector.get_table_names():
                     columns = [col['name'] for col in inspector.get_columns(table_name)]
                     if 'user_id' in columns:
+                        # table_name is from the fixed allowlist above, not user input
                         result = conn.execute(text(
-                            f"UPDATE {table_name} SET user_id = :admin_id WHERE user_id IS NULL"
+                            f"UPDATE {table_name} SET user_id = :admin_id WHERE user_id IS NULL"  # nosec B608
                         ), {"admin_id": admin_id})
                         if result.rowcount > 0:
                             logger.info(f"Migration: Assigned {result.rowcount} orphaned {table_name} to admin user {admin_id}")

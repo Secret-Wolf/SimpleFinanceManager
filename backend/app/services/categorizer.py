@@ -1,15 +1,15 @@
-from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_
-from typing import List, Optional
-from decimal import Decimal
-import re
 import concurrent.futures
+import re
+from decimal import Decimal
+from typing import List, Optional
+
+from sqlalchemy.orm import Session
+
+from ..models import Account, CategorizationRule, Transaction
 
 _regex_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="regex")
 _REGEX_TIMEOUT = 2.0
 _REGEX_INPUT_LIMIT = 2000
-
-from ..models import Transaction, CategorizationRule, Category
 
 
 def match_pattern(text: str, pattern: str) -> bool:
@@ -95,69 +95,74 @@ def match_rule(transaction: Transaction, rule: CategorizationRule) -> bool:
     return True
 
 
-def categorize_transaction(db: Session, transaction: Transaction) -> Optional[dict]:
-    """Find matching category and shared flag for a transaction based on rules.
-    Returns dict with category_id and assign_shared, or None."""
+def _user_account_ids(db: Session, user_id: int) -> List[int]:
+    return [a.id for a in db.query(Account.id).filter(Account.user_id == user_id).all()]
 
-    # Get all active rules, ordered by priority (highest first)
-    rules = db.query(CategorizationRule).filter(
-        CategorizationRule.is_active == True
+
+def _active_rules_for_user(db: Session, user_id: int) -> List[CategorizationRule]:
+    """Active rules belonging to one user, highest priority first."""
+    return db.query(CategorizationRule).filter(
+        CategorizationRule.is_active == True,
+        CategorizationRule.user_id == user_id,
     ).order_by(CategorizationRule.priority.desc()).all()
 
+
+def _first_matching_rule(rules: List[CategorizationRule], transaction: Transaction) -> Optional[dict]:
     for rule in rules:
         if match_rule(transaction, rule):
-            return {
-                "category_id": rule.assign_category_id,
-                "assign_shared": rule.assign_shared
-            }
-
+            return {"category_id": rule.assign_category_id, "assign_shared": rule.assign_shared}
     return None
 
 
-def apply_rules_to_transaction(db: Session, transaction: Transaction) -> bool:
-    """Apply categorization rules to a single transaction"""
-    if transaction.category_id is not None:
-        return False
-
-    result = categorize_transaction(db, transaction)
-    if result:
-        transaction.category_id = result["category_id"]
-        if result["assign_shared"]:
-            transaction.is_shared = True
-        return True
-
-    return False
+def categorize_transaction(db: Session, transaction: Transaction, user_id: int) -> Optional[dict]:
+    """Find a matching category/shared flag using ONLY the given user's active rules."""
+    return _first_matching_rule(_active_rules_for_user(db, user_id), transaction)
 
 
-def apply_rules_to_uncategorized(db: Session) -> int:
-    """Apply rules to all uncategorized transactions. Returns count of categorized."""
+def apply_rules_to_uncategorized(db: Session, user_id: int) -> int:
+    """Apply the user's rules to the user's uncategorized transactions. Returns count.
+
+    User-scoped: only the user's own accounts' transactions and own rules are touched
+    (a user's rules must never categorize another user's transactions)."""
+    account_ids = _user_account_ids(db, user_id)
+    rules = _active_rules_for_user(db, user_id)
+    if not account_ids or not rules:
+        return 0
 
     uncategorized = db.query(Transaction).filter(
         Transaction.category_id == None,
-        Transaction.is_split_parent == False
+        Transaction.is_split_parent == False,
+        Transaction.account_id.in_(account_ids),
     ).all()
 
     categorized_count = 0
-
     for transaction in uncategorized:
-        if apply_rules_to_transaction(db, transaction):
+        result = _first_matching_rule(rules, transaction)
+        if result:
+            transaction.category_id = result["category_id"]
+            if result["assign_shared"]:
+                transaction.is_shared = True
             categorized_count += 1
 
     db.commit()
     return categorized_count
 
 
-def apply_rules_to_all(db: Session) -> int:
-    """Apply rules to ALL transactions, overwriting existing categories. Returns count."""
+def apply_rules_to_all(db: Session, user_id: int) -> int:
+    """Apply the user's rules to ALL their transactions, overwriting categories. Returns count."""
+    account_ids = _user_account_ids(db, user_id)
+    rules = _active_rules_for_user(db, user_id)
+    if not account_ids or not rules:
+        return 0
 
     transactions = db.query(Transaction).filter(
-        Transaction.is_split_parent == False
+        Transaction.is_split_parent == False,
+        Transaction.account_id.in_(account_ids),
     ).all()
 
     categorized_count = 0
-
     for transaction in transactions:
-        result = categorize_transaction(db, transaction)
+        result = _first_matching_rule(rules, transaction)
         if result:
             transaction.category_id = result["category_id"]
             if result["assign_shared"]:

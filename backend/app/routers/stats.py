@@ -1,21 +1,17 @@
-from fastapi import APIRouter, Depends, Query, HTTPException, status
-from sqlalchemy.orm import Session
-from sqlalchemy import and_, desc
-from datetime import date, timedelta
-from typing import Optional, List
 from calendar import monthrange
-from dateutil.relativedelta import relativedelta
+from datetime import date, timedelta
+from typing import List, Optional
 
-from ..database import get_db
-from ..auth import get_current_user
-from ..models import Transaction, Category, Account, User
-from ..services.statistics import (
-    get_dashboard_summary,
-    get_stats_by_category,
-    get_stats_over_time,
-    get_shared_summary
-)
+from dateutil.relativedelta import relativedelta
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import desc
+from sqlalchemy.orm import Session
+
 from .. import schemas
+from ..auth import get_current_user
+from ..database import get_db
+from ..models import Account, Category, Transaction, User
+from ..services.statistics import get_dashboard_summary, get_shared_summary, get_stats_by_category, get_stats_over_time
 
 router = APIRouter(prefix="/api/stats", tags=["statistics"])
 

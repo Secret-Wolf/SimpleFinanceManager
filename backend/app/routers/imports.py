@@ -1,15 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
-from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List
 
-from ..audit import log_data_event
-from ..database import get_db
-from ..auth import get_current_user
-from ..models import Import, User
-from ..services.csv_parser import import_csv, SUPPORTED_FORMATS
-from ..services.categorizer import apply_rules_to_uncategorized
-from ..config import settings
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from sqlalchemy.orm import Session
+
 from .. import schemas
+from ..audit import log_data_event
+from ..auth import get_current_user
+from ..config import settings
+from ..database import get_db
+from ..models import Import, User
+from ..services.categorizer import apply_rules_to_uncategorized
+from ..services.csv_parser import SUPPORTED_FORMATS, import_csv
 
 router = APIRouter(prefix="/api/import", tags=["import"])
 
@@ -72,20 +73,22 @@ async def upload_csv(
                 detail="Datei-Encoding konnte nicht erkannt werden"
             )
 
-    except Exception as e:
+    except HTTPException:
+        raise  # don't mask the 413 (too large) / 400 (encoding) raised above
+    except Exception:
         raise HTTPException(
             status_code=400,
             detail="Fehler beim Lesen der Datei"
-        )
+        ) from None
 
     # Import CSV
     try:
         import_result = import_csv(db, content_str, file.filename, bank_format, user_id=current_user.id)
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=500,
             detail="Import fehlgeschlagen"
-        )
+        ) from None
 
     log_data_event(
         "csv_import",
@@ -94,9 +97,9 @@ async def upload_csv(
         detail=f"file={file.filename} format={bank_format} new={import_result.transactions_new} duplicates={import_result.transactions_duplicate}",
     )
 
-    # Auto-categorize new transactions
+    # Auto-categorize new transactions (only this user's rules/transactions)
     if auto_categorize and import_result.transactions_new > 0:
-        apply_rules_to_uncategorized(db)
+        apply_rules_to_uncategorized(db, current_user.id)
 
     return import_result
 

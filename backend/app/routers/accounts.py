@@ -1,14 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import func, case
-from typing import List, Optional
 from decimal import Decimal
+from typing import List
 
-from ..audit import log_data_event
-from ..database import get_db
-from ..auth import get_current_user
-from ..models import Account, Transaction, User
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import case, func
+from sqlalchemy.orm import Session
+
 from .. import schemas
+from ..audit import log_data_event
+from ..auth import get_current_user
+from ..database import get_db
+from ..models import Account, Transaction, User
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 

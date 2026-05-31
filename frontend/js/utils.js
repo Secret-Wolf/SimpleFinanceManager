@@ -1,12 +1,30 @@
 // Utility Functions
 
-// Escape HTML to prevent XSS
+// Escape HTML to prevent XSS (for text content between tags)
 function escapeHtml(str) {
     if (str === null || str === undefined) return '';
     const text = String(str);
     const div = document.createElement('div');
     div.appendChild(document.createTextNode(text));
     return div.innerHTML;
+}
+
+// Validate a color before injecting it into a style="..." attribute.
+// escapeHtml does NOT escape quotes, so an unvalidated color could break out of
+// the attribute. Returns the color only if it is a safe hex/rgb value, else a fallback.
+function safeColor(color, fallback = '#888888') {
+    if (typeof color !== 'string') return fallback;
+    const c = color.trim();
+    if (/^#[0-9a-fA-F]{3,8}$/.test(c)) return c;
+    if (/^rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\)$/.test(c)) return c;
+    return fallback;
+}
+
+// Quote a value for CSV and neutralize formula injection (leading = + - @ / control char).
+function csvCell(value) {
+    let s = value === null || value === undefined ? '' : String(value);
+    if (s && '=+-@\t\r'.includes(s[0])) s = "'" + s;
+    return '"' + s.replace(/"/g, '""') + '"';
 }
 
 // Format currency in German format

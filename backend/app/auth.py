@@ -3,11 +3,11 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+import bcrypt
+import jwt as pyjwt
 from fastapi import Depends, HTTPException, Request, Response, status
 from fastapi.security import APIKeyCookie
-import jwt as pyjwt
 from jwt import PyJWTError
-import bcrypt
 from sqlalchemy.orm import Session
 
 from .config import settings

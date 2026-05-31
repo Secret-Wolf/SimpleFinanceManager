@@ -1,8 +1,28 @@
-from pydantic import BaseModel, field_validator
+import ipaddress
+import re
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional, List
-import re
+from typing import List, Optional
+from urllib.parse import urlparse
+
+from pydantic import BaseModel, field_validator
+
+_BLOCKED_FINTS_HOSTNAMES = {"localhost", "ip6-localhost", "ip6-loopback"}
+
+
+def _is_internal_fints_host(url: str) -> bool:
+    """Reject FinTS URLs pointing at internal/loopback/link-local targets (SSRF guard).
+    Real bank endpoints are public DNS names, so literal private IPs / localhost are
+    never legitimate here. (Hostname → internal-IP rebinding is out of scope.)"""
+    host = (urlparse(url).hostname or "").strip().lower()
+    if not host or host in _BLOCKED_FINTS_HOSTNAMES or host.endswith(".localhost"):
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False  # a hostname (not an IP literal) — allowed
+    return (ip.is_private or ip.is_loopback or ip.is_link_local
+            or ip.is_reserved or ip.is_multicast or ip.is_unspecified)
 
 
 # Auth Schemas
@@ -361,6 +381,8 @@ class BankConnectionCreate(BaseModel):
         v = v.strip()
         if not v.startswith("https://"):
             raise ValueError("FinTS-URL muss mit https:// beginnen")
+        if _is_internal_fints_host(v):
+            raise ValueError("FinTS-URL darf nicht auf interne/lokale Adressen zeigen")
         return v
 
 

@@ -1,12 +1,13 @@
-from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, or_, extract
-from datetime import date, datetime, timedelta
-from decimal import Decimal
-from typing import List, Dict, Optional
 from calendar import monthrange
+from datetime import date
+from decimal import Decimal
+from typing import Dict, List, Optional
 
-from ..models import Transaction, Category, Account
+from sqlalchemy import and_, func
+from sqlalchemy.orm import Session
+
 from .. import schemas
+from ..models import Account, Category, Transaction
 
 
 def _apply_user_scope(query, user_account_ids: List[int] = None):

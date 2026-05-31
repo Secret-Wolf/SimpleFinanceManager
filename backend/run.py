@@ -2,9 +2,10 @@
 """
 Finanzmanager - Startup Script
 """
-import uvicorn
 import os
 import sys
+
+import uvicorn
 
 # Add backend to path
 sys.path.insert(0, os.path.dirname(__file__))

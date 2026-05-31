@@ -8,7 +8,16 @@ Self-hosted personal-finance web app ("Finanzmanager"). German users import bank
 
 ## Commands
 
-There is **no test suite, no linter, and no build step** — don't look for `pytest`/`ruff`/`npm`. Verify changes by running the app.
+There is **no frontend build step** (vanilla JS, served as-is — no `npm`). The backend has tests, linting, and security scans; run them from the repo root (config in `pyproject.toml`):
+
+```bash
+pytest                        # API test suite (backend/tests/, each test gets an isolated temp DB)
+ruff check backend            # lint  (use `ruff format backend` to auto-format)
+bandit -r backend/app         # security static analysis (SAST)
+pip-audit -r backend/requirements.txt --ignore-vuln PYSEC-2026-87   # dependency CVEs
+```
+
+Install the tooling with `pip install -r backend/requirements-dev.txt`. CI (`.github/workflows/ci.yml`) runs all four on every push/PR. Beyond automated checks, verify behavior by running the app.
 
 ```powershell
 # Local dev (from repo root). DEBUG=true enables uvicorn reload + API docs at /api/docs.
@@ -70,7 +79,7 @@ query.filter(Transaction.account_id.in_(user_account_ids) if user_account_ids el
 ```
 The `Transaction.id == -1` sentinel is deliberate: a user with zero accounts must match **nothing** (an empty `IN ()` would otherwise misbehave). Categories and rules isolate directly via their own `user_id` column. **Any new endpoint that reads transactions must reproduce this filter or it leaks across users.**
 
-**2. The categorizer service is the exception — it is global, not user-scoped.** `services/categorizer.py` (`apply_rules_to_uncategorized`, `apply_rules_to_all`, `categorize_transaction`) queries **all** active rules against **all** transactions, ignoring user boundaries. It runs from `POST /api/rules/apply` and from CSV-import auto-categorization. Keep this in mind before assuming isolation holds everywhere.
+**2. The categorizer service is user-scoped — pass `user_id`.** `services/categorizer.py` (`apply_rules_to_uncategorized(db, user_id)`, `apply_rules_to_all(db, user_id)`, `categorize_transaction(db, tx, user_id)`) matches only the user's own active rules against only that user's own accounts' transactions. Callers pass `current_user.id` (routers `rules.py`/`imports.py`) or the connection's `user_id` (FinTS import). It runs from `POST /api/rules/apply` and from CSV/FinTS import auto-categorization. (Earlier versions ran globally across all users — that was a cross-user bug; keep the `user_id` scoping when adding callers.)
 
 **3. CSP bans inline JavaScript.** `main.py` sets `script-src 'self'` (no `unsafe-inline`), so inline `onclick`/`onchange` will silently not fire. UI wires behavior through `event-handlers.js`: elements carry `data-action="fnName"` plus `data-id`/`data-value`/`data-arg2`, and one document-level delegated listener dispatches to a global function or the `CLICK_ACTIONS` map (`data-onchange` for selects). Add interactivity that way — never inline handlers.
 
@@ -90,7 +99,22 @@ The `Transaction.id == -1` sentinel is deliberate: a user with zero accounts mus
 - **Ingestion reuses the CSV path**: `generate_import_hash()` + `ensure_account_exists()` (so FinTS dedupes against CSV and links accounts by IBAN) and `apply_rules_to_uncategorized()`. Connections are user-isolated by `user_id`.
 - **`product_id` is mandatory in python-fints v4+.** `FINTS_PRODUCT_ID` (env) is passed through; when unset, `_FALLBACK_PRODUCT_ID` is used. **Atruvia/Volksbank strictly rejects the fallback** (bank return code **9078** "not registered", surfaced as a misleading "Could not find system_id" because `_bootstrap_mode` swallows the SCA/error) and requires a real, free DK product registration set as `FINTS_PRODUCT_ID`; ING is lenient. New dependency: `fints` in `requirements.txt`.
 - **Diagnostics:** `_attach_code_recorder()` wraps the client's `_process_response` to capture the bank's real return codes (incl. internal sends, which `add_response_callback` misses) — they're logged and surfaced in the user-facing error. Useful when a bank fails with an opaque error.
+- **Status:** ING is **verified working end-to-end** (login SCA → import → dedup → auto-categorize) with the fallback product ID — no registration needed. A free DK product registration (product name "SimpleFinanceManager", category *Web-Server*) has been **submitted** for Volksbank/Atruvia (which returns 9078 without it); once the number is assigned, set it as `FINTS_PRODUCT_ID`.
 
 **Env vars added for this feature:** `DATABASE_PATH` (override the SQLite path — used to run a dedicated dev DB without touching `finanzmanager.db`) and `FINTS_PRODUCT_ID`/`FINTS_PRODUCT_VERSION`. The `bank_connections` table is added by an **additive** migration (Migration 15) — no existing table is altered.
 
 Security-relevant actions log JSON lines to `data/logs/audit.log` via `audit.py` (IBANs masked); call `log_auth_event` / `log_data_event` for new sensitive operations.
+
+## Roadmap & product direction (read before changing the hosting model)
+
+This is intended to become an open-source product (GitHub) and may later ship as a packaged app and/or with optional paid licenses.
+
+**The load-bearing architectural constraint: stay "user-hosted" (the software-vendor model).** FinTS must run somewhere; keeping it on the user's own device/server (today's Docker model, or a future desktop/LAN build) means each user accesses *their own* bank with *their own* credentials — so this stays a *software product* (like Lexware/StarMoney/Hibiscus), not a regulated service. **A central/SaaS backend that accesses or aggregates users' bank accounts on your infrastructure would likely make this an Account Information Service (AISP) under PSD2 → BaFin licensing + GDPR processor obligations + holding users' banking data.** Do **not** add a "hosted server" / multi-tenant-cloud mode as a casual feature — it's a separate, legal-review-gated decision.
+
+Planned directions, all compatible with user-hosting:
+- **Packaged desktop app** (e.g. pywebview/Tauri wrapping the local FastAPI server + SQLite) for users who don't want to run Docker. FinTS still runs in the bundled backend.
+- **iOS/Android app as a LAN client** to the user-hosted backend — python-fints can't run on mobile, so the backend stays the FinTS engine; the app is just a UI talking to it over the local network.
+- **Manual, LAN-only PC↔phone sync** (no central server).
+- **Monetization:** donations or selling the software (license/lifetime) is fine and needs no AISP license; only hosting/aggregating accounts yourself does.
+
+**Product registration:** one DK product registration covers the whole product. Its `FINTS_PRODUCT_ID` is a public identifier (not a secret) and should ship with the code so end users don't each have to register; the env var still allows power-user overrides.

@@ -1,13 +1,14 @@
 """Household management endpoints"""
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 from typing import List
 
-from ..database import get_db
-from ..auth import get_current_user
-from ..models import User, Household, HouseholdMember, HouseholdInvite
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
 from .. import schemas
+from ..auth import get_current_user
+from ..database import get_db
+from ..models import Household, HouseholdInvite, HouseholdMember, User
 
 router = APIRouter(prefix="/api/households", tags=["households"])
 

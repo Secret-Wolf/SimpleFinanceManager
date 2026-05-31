@@ -376,7 +376,7 @@ async function loadSharedExpensesView(householdId, memberCount, householdName) {
                                         <tr>
                                             <td>
                                                 <span class="category-badge">
-                                                    <span class="dot" style="background-color: ${cat.category_color || '#888'}"></span>
+                                                    <span class="dot" style="background-color: ${safeColor(cat.category_color)}"></span>
                                                     ${escapeHtml(cat.category_name)}
                                                 </span>
                                             </td>

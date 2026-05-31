@@ -89,8 +89,8 @@ async function loadCategoryStats() {
                         <tr>
                             <td>
                                 <span class="category-badge">
-                                    <span class="dot" style="background-color: ${cat.category_color || '#888'}"></span>
-                                    ${cat.category_name}
+                                    <span class="dot" style="background-color: ${safeColor(cat.category_color)}"></span>
+                                    ${escapeHtml(cat.category_name)}
                                 </span>
                             </td>
                             <td class="text-right amount negative">${formatCurrency(cat.total)}</td>
@@ -161,7 +161,7 @@ function renderCategoryChart(data) {
                 <div class="bar-row">
                     <div class="bar-label">${truncate(cat.category_name, 15)}</div>
                     <div class="bar-container">
-                        <div class="bar" style="width: ${(cat.total / maxValue) * 100}%; background-color: ${cat.category_color || '#888'}"></div>
+                        <div class="bar" style="width: ${(cat.total / maxValue) * 100}%; background-color: ${safeColor(cat.category_color)}"></div>
                     </div>
                     <div class="bar-value">${formatCurrency(cat.total)}</div>
                 </div>
@@ -327,7 +327,7 @@ async function exportStats() {
         let csv = 'Kategorie;Summe;Durchschnitt/Monat;Anzahl\n';
 
         for (const cat of stats.categories) {
-            csv += `"${cat.category_name}";${cat.total};${cat.average_monthly};${cat.transaction_count}\n`;
+            csv += `${csvCell(cat.category_name)};${cat.total};${cat.average_monthly};${cat.transaction_count}\n`;
         }
 
         csv += `\n"Einnahmen gesamt";${stats.total_income};\n`;
@@ -414,7 +414,7 @@ async function loadSharedSummary() {
                                 <tr>
                                     <td>
                                         <span class="category-badge">
-                                            <span class="dot" style="background-color: ${cat.category_color || '#888'}"></span>
+                                            <span class="dot" style="background-color: ${safeColor(cat.category_color)}"></span>
                                             ${escapeHtml(cat.category_name)}
                                         </span>
                                     </td>

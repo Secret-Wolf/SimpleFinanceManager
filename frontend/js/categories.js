@@ -36,7 +36,7 @@ function renderCategoryTree(cats, level = 0) {
 
         html += `
             <div class="category-item ${level > 0 ? 'subcategory' : ''}" style="padding-left: ${16 + paddingLeft}px;" data-id="${cat.id}">
-                <div class="color-dot" style="background-color: ${cat.color || '#888'}"></div>
+                <div class="color-dot" style="background-color: ${safeColor(cat.color)}"></div>
                 <span class="name">${escapeHtml(cat.name)}</span>
                 <span class="count">${cat.transaction_count || 0}</span>
                 <div class="actions">
