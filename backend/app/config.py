@@ -6,9 +6,12 @@ import sys
 
 
 class Settings:
-    # Database
-    DATABASE_PATH: str = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "finanzmanager.db"
+    # Database - override via DATABASE_PATH to use a dedicated DB (e.g. for testing)
+    DATABASE_PATH: str = os.getenv(
+        "DATABASE_PATH",
+        os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "finanzmanager.db"
+        ),
     )
 
     # JWT
@@ -30,6 +33,11 @@ class Settings:
 
     # Upload
     MAX_UPLOAD_SIZE_MB: int = int(os.getenv("MAX_UPLOAD_SIZE_MB", "10"))
+
+    # FinTS / Online-Banking
+    # Optional PSD2 product registration ID (Deutsche Kreditwirtschaft). Empty = library fallback.
+    FINTS_PRODUCT_ID: str = os.getenv("FINTS_PRODUCT_ID", "")
+    FINTS_PRODUCT_VERSION: str = os.getenv("FINTS_PRODUCT_VERSION", "2.0")
 
     def __init__(self):
         # Auto-generate SECRET_KEY if not set, persist to file for consistency

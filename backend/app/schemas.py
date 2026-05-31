@@ -340,6 +340,76 @@ class Rule(RuleBase):
         from_attributes = True
 
 
+# Bank Connection (FinTS) Schemas
+class BankConnectionCreate(BaseModel):
+    name: str
+    bank_code: str          # Bankleitzahl (BLZ)
+    fints_url: str
+    login_name: str         # Benutzerkennung / Login
+
+    @field_validator("name", "bank_code", "fints_url", "login_name")
+    @classmethod
+    def not_empty(cls, v):
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("Feld darf nicht leer sein")
+        return v
+
+    @field_validator("fints_url")
+    @classmethod
+    def validate_url(cls, v):
+        v = v.strip()
+        if not v.startswith("https://"):
+            raise ValueError("FinTS-URL muss mit https:// beginnen")
+        return v
+
+
+class BankConnectionResponse(BaseModel):
+    id: int
+    name: str
+    bank_code: str
+    fints_url: str
+    login_name: str
+    tan_mechanism: Optional[str] = None
+    last_sync: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class SyncRequest(BaseModel):
+    pin: str
+    from_date: Optional[date] = None  # default handled server-side (e.g. last 90 days)
+
+    @field_validator("pin")
+    @classmethod
+    def pin_not_empty(cls, v):
+        if not v:
+            raise ValueError("PIN erforderlich")
+        return v
+
+
+class TanRequest(BaseModel):
+    job_id: str
+    tan: Optional[str] = None  # empty/None for decoupled (approve-in-app) methods
+
+
+class SyncResult(BaseModel):
+    status: str  # "done" | "tan_required" | "error"
+    # status == "done"
+    imported: Optional[int] = None
+    duplicates: Optional[int] = None
+    accounts: Optional[List[str]] = None
+    message: Optional[str] = None
+    # status == "tan_required"
+    job_id: Optional[str] = None
+    challenge: Optional[str] = None
+    decoupled: bool = False
+    challenge_image: Optional[str] = None  # data: URI for photoTAN / matrix code
+    tan_mechanism_name: Optional[str] = None
+
+
 # Import Schemas
 class ImportResult(BaseModel):
     id: int

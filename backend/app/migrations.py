@@ -268,4 +268,25 @@ def run_migrations():
                 conn.commit()
                 logger.info("Migration: shared_household_id added to transactions")
 
+        # Migration 15: Add bank_connections table (FinTS/HBCI online banking)
+        if 'bank_connections' not in inspector.get_table_names():
+            logger.info("Migration: Creating bank_connections table")
+            conn.execute(text("""
+                CREATE TABLE bank_connections (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    name VARCHAR(200) NOT NULL,
+                    bank_code VARCHAR(20) NOT NULL,
+                    fints_url VARCHAR(500) NOT NULL,
+                    login_name VARCHAR(200) NOT NULL,
+                    fints_system_data TEXT,
+                    tan_mechanism VARCHAR(20),
+                    tan_medium VARCHAR(200),
+                    last_sync TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.commit()
+            logger.info("Migration: bank_connections table created")
+
         logger.info("All migrations completed")

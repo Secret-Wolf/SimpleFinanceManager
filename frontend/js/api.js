@@ -333,6 +333,40 @@ class ApiClient {
         });
     }
 
+    // Online Banking (FinTS)
+    async getBankConnections() {
+        return this.request('/banking/connections');
+    }
+
+    async createBankConnection(data) {
+        return this.request('/banking/connections', {
+            method: 'POST',
+            body: data
+        });
+    }
+
+    async deleteBankConnection(id) {
+        return this.request(`/banking/connections/${id}`, {
+            method: 'DELETE'
+        });
+    }
+
+    async syncBankConnection(id, pin, fromDate = null) {
+        const body = { pin };
+        if (fromDate) body.from_date = fromDate;
+        return this.request(`/banking/connections/${id}/sync`, {
+            method: 'POST',
+            body
+        });
+    }
+
+    async submitBankTan(connectionId, jobId, tan = null) {
+        return this.request(`/banking/connections/${connectionId}/tan`, {
+            method: 'POST',
+            body: { job_id: jobId, tan }
+        });
+    }
+
 }
 
 // Export singleton instance

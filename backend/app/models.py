@@ -213,3 +213,32 @@ class Import(Base):
     transactions_error = Column(Integer, default=0)
     status = Column(String)  # "success", "partial", "failed"
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+
+class BankConnection(Base):
+    """A FinTS/HBCI online-banking access for retrieving balances & transactions.
+
+    Note: the banking PIN is NEVER stored here. It is supplied per sync and only
+    held transiently in memory during the TAN round-trip (see services/fints_service.py).
+    """
+    __tablename__ = "bank_connections"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    name = Column(String, nullable=False)
+    bank_code = Column(String, nullable=False)  # Bankleitzahl (BLZ)
+    fints_url = Column(String, nullable=False)  # FinTS server endpoint
+    login_name = Column(String, nullable=False)  # Benutzerkennung / Login
+
+    # Serialized FinTS client state (deconstruct) for system_id continuity.
+    # Contains NO credentials/PIN; reduces how often a TAN is required.
+    fints_system_data = Column(Text, nullable=True)
+
+    # Selected TAN method (persisted after first sync so it isn't re-picked each time)
+    tan_mechanism = Column(String, nullable=True)
+    tan_medium = Column(String, nullable=True)
+
+    last_sync = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+
+    owner = relationship("User")

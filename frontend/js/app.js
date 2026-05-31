@@ -47,6 +47,9 @@ function navigateTo(page) {
         case 'accounts':
             loadAccounts();
             break;
+        case 'banking':
+            loadBanking();
+            break;
         case 'import':
             // Import page doesn't need initial load
             break;

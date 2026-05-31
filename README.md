@@ -28,6 +28,7 @@ Mehrbenutzerfähig mit Login, strikter Datentrennung pro Benutzer und gemeinsame
 ## Features
 
 ### Transaktionen & Import
+- **Online-Banking (FinTS/HBCI)** – Kontostand und Umsätze read-only direkt von der Bank abrufen (Volksbank/Atruvia, ING), ohne CSV-Export
 - **CSV-Import** – Drag & Drop von Volksbank/Atruvia- und ING-Exporten, Format wird automatisch erkannt
 - **Automatische Duplikaterkennung** – Bereits importierte Buchungen werden übersprungen
 - **Mehrere Konten** – Buchungen werden automatisch dem Konto (per IBAN) zugeordnet, globaler Kontofilter
@@ -166,12 +167,47 @@ Für Docker eine `.env` neben der `docker-compose.yml` anlegen (Vorlage: [`.env.
 | `MAX_UPLOAD_SIZE_MB` | `10` | Maximale Größe einer CSV-Datei. |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `30` | Gültigkeit des Access-Tokens. |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | `7` | Gültigkeit des Refresh-Tokens. |
+| `FINTS_PRODUCT_ID` | *(Fallback)* | FinTS-Produkt-ID für Online-Banking (siehe unten). Ohne Registrierung wird ein neutraler Fallback genutzt. |
+| `DATABASE_PATH` | `data/finanzmanager.db` | Pfad zur SQLite-DB. Überschreiben, um z.B. mit einer separaten Test-DB zu arbeiten. |
 
 ## Verwendung
 
 ### Erster Start
 
 Beim ersten Aufruf erscheint die **Ersteinrichtung**: Lege das erste Benutzerkonto an – dieser Benutzer wird automatisch **Administrator**. Anschließend werden Standardkategorien erstellt. Weitere Benutzer können nur vom Admin unter **Benutzer** angelegt werden.
+
+### Online-Banking (FinTS/HBCI)
+
+Umsätze und Kontostand lassen sich **read-only** direkt von der Bank abrufen – ohne CSV-Export. Es werden ausschließlich Daten gelesen, **keine Überweisungen** ausgelöst.
+
+1. Gehe zu **Online-Banking** in der Seitenleiste → **Verbindung hinzufügen**
+2. Felder ausfüllen:
+   - **Name** – frei wählbar (z.B. „ING Giro")
+   - **Bankleitzahl (BLZ)** – z.B. `50010517` für die ING
+   - **Login / Benutzerkennung** – deine Online-Banking-Kennung
+   - **FinTS-URL** – wird anhand der BLZ vorgeschlagen:
+     - **ING:** `https://fints.ing.de/fints/`
+     - **Volksbank/Raiffeisenbank (Atruvia):** `https://fints2.atruvia.de/cgi-bin/hbciservlet` (Süd) bzw. `https://fints1.atruvia.de/cgi-bin/hbciservlet` (Nord) – je nach Region anpassen
+3. **Umsätze abrufen** klicken → **PIN** eingeben (Zeitraum optional, Standard: letzte 90 Tage)
+4. Falls die Bank eine **TAN** verlangt: entweder in der Banking-App **freigeben** (wird automatisch erkannt und abgewartet) oder die **TAN eingeben**
+5. Neue Umsätze werden importiert, Duplikate übersprungen und automatisch nach deinen Regeln kategorisiert – gemeinsam mit ggf. bereits per CSV importierten Buchungen.
+
+> **PIN:** Die Banking-PIN wird **nicht gespeichert**. Sie wird pro Abruf eingegeben und nur kurz im Speicher gehalten, während der TAN-Vorgang läuft.
+
+#### FinTS-Produkt-ID (`FINTS_PRODUCT_ID`) – für Volksbank/Atruvia zwingend
+
+Seit dem 01.08.2019 (PSD2) lassen viele Banken nur **registrierte** FinTS-Produkte zu. Die Software muss bei jeder Dialog­initialisierung eine **Produkt-Registrierungsnummer** der **Deutschen Kreditwirtschaft (DK)** mitsenden.
+
+- **ING** ist hier meist tolerant – der Abruf funktioniert oft mit dem eingebauten Fallback.
+- **Volksbank/Raiffeisenbank (Atruvia)** erzwingt die Registrierung strikt. Ohne registrierte ID bricht die Bank den Dialog mit **Code 9078** („Software nicht als FinTS-Produkt registriert") ab.
+
+**Registrierung (kostenlos):** Das Formular von der [FinTS-Produktregistrierung](https://www.fints.org/de/hersteller/produktregistrierung) ausfüllen und an `registrierung@hbci-zka.de` senden. Die zugeteilte Nummer kommt i.d.R. in 5–10 Werktagen. Anschließend als Umgebungsvariable setzen:
+
+```
+FINTS_PRODUCT_ID=<deine-registrierungsnummer>
+```
+
+Ein Code-Update ist dafür nicht nötig – nur die Variable setzen und den Container/Server neu starten. Fremde/erfundene Produkt-IDs sind nicht zulässig und werden von Atruvia abgewiesen.
 
 ### CSV importieren
 

@@ -10,7 +10,7 @@ import os
 from .config import settings
 from .database import init_db
 from .migrations import run_migrations
-from .routers import transactions, categories, rules, imports, stats, accounts, auth, households
+from .routers import transactions, categories, rules, imports, stats, accounts, auth, households, banking
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address, default_limits=[f"{settings.RATE_LIMIT_PER_MINUTE}/minute"])
@@ -79,6 +79,7 @@ app.include_router(imports.router)
 app.include_router(stats.router)
 app.include_router(accounts.router)
 app.include_router(households.router)
+app.include_router(banking.router)
 
 
 @app.get("/api/health")
