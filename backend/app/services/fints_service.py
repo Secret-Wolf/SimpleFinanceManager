@@ -32,11 +32,13 @@ from .csv_parser import ensure_account_exists, generate_import_hash
 
 logger = logging.getLogger(__name__)
 
-# python-fints v4+ requires a product_id. Officially you register one (free) with the
-# Deutsche Kreditwirtschaft and set FINTS_PRODUCT_ID. This neutral fallback lets the
-# feature work with banks that don't enforce registration; banks that do will reject it
-# with a clear error, prompting the user to register and set FINTS_PRODUCT_ID.
-_FALLBACK_PRODUCT_ID = "SIMPLEFINANCEMANAGER"
+# python-fints v4+ requires a product_id. This is the official FinTS product-registration
+# number assigned by the Deutsche Kreditwirtschaft for "SimpleFinanceManager" (category
+# Web-Server). It is a public product identifier — sent to the bank in the HKVVB
+# "Produktbezeichnung" field — and ships with the product so end users don't each have to
+# register. Per the DK letter it must be exactly 25 characters. Power users can override it
+# per-instance via the FINTS_PRODUCT_ID env var.
+_FALLBACK_PRODUCT_ID = "FCA446B4054E9C1DD2E5189AB"
 
 
 class BankingError(Exception):
@@ -92,7 +94,8 @@ def _drop_pending(token: str):
 
 def _build_client(connection: BankConnection, pin: str, from_data: Optional[bytes] = None) -> FinTS3PinTanClient:
     kwargs = {
-        "product_id": settings.FINTS_PRODUCT_ID or _FALLBACK_PRODUCT_ID,
+        # HKVVB "Produktbezeichnung" — exactly the 25-char registration ID, no extra chars
+        "product_id": (settings.FINTS_PRODUCT_ID or _FALLBACK_PRODUCT_ID).strip(),
     }
     if settings.FINTS_PRODUCT_VERSION:
         kwargs["product_version"] = settings.FINTS_PRODUCT_VERSION

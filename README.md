@@ -167,7 +167,7 @@ Für Docker eine `.env` neben der `docker-compose.yml` anlegen (Vorlage: [`.env.
 | `MAX_UPLOAD_SIZE_MB` | `10` | Maximale Größe einer CSV-Datei. |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `30` | Gültigkeit des Access-Tokens. |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | `7` | Gültigkeit des Refresh-Tokens. |
-| `FINTS_PRODUCT_ID` | *(Fallback)* | FinTS-Produkt-ID für Online-Banking (siehe unten). Ohne Registrierung wird ein neutraler Fallback genutzt. |
+| `FINTS_PRODUCT_ID` | *(mitgeliefert)* | FinTS-Produkt-ID fürs Online-Banking (siehe unten). Eine registrierte ID ist eingebaut; nur setzen, um sie mit einer eigenen zu überschreiben. |
 | `DATABASE_PATH` | `data/finanzmanager.db` | Pfad zur SQLite-DB. Überschreiben, um z.B. mit einer separaten Test-DB zu arbeiten. |
 
 ## Verwendung
@@ -194,18 +194,19 @@ Umsätze und Kontostand lassen sich **read-only** direkt von der Bank abrufen �
 
 > **PIN:** Die Banking-PIN wird **nicht gespeichert**. Sie wird pro Abruf eingegeben und nur kurz im Speicher gehalten, während der TAN-Vorgang läuft.
 
-#### FinTS-Produkt-ID (`FINTS_PRODUCT_ID`) – für Volksbank/Atruvia zwingend
+#### FinTS-Produkt-ID (`FINTS_PRODUCT_ID`)
 
-Seit dem 01.08.2019 (PSD2) lassen viele Banken nur **registrierte** FinTS-Produkte zu. Die Software muss bei jeder Dialog­initialisierung eine **Produkt-Registrierungsnummer** der **Deutschen Kreditwirtschaft (DK)** mitsenden.
+Seit dem 01.08.2019 (PSD2) lassen viele Banken nur **registrierte** FinTS-Produkte zu: die Software sendet bei jeder Dialog­initialisierung eine 25-stellige **Produkt-Registrierungsnummer** der **Deutschen Kreditwirtschaft (DK)** mit.
 
-- **ING** ist hier meist tolerant – der Abruf funktioniert oft mit dem eingebauten Fallback.
-- **Volksbank/Raiffeisenbank (Atruvia)** erzwingt die Registrierung strikt. Ohne registrierte ID bricht die Bank den Dialog mit **Code 9078** („Software nicht als FinTS-Produkt registriert") ab.
+Der Finanzmanager **bringt eine registrierte Produkt-ID mit** (für „SimpleFinanceManager"). Damit funktionieren **ING und Volksbank/Raiffeisenbank (Atruvia) ohne weitere Konfiguration**. (Atruvia erzwingt die Registrierung strikt und lehnt unregistrierte IDs mit **Code 9078** ab; nach Zuteilung einer Nummer dauert es einige Werktage, bis die Bank-Rechenzentren sie kennen.)
 
-**Registrierung (kostenlos):** Das Formular von der [FinTS-Produktregistrierung](https://www.fints.org/de/hersteller/produktregistrierung) ausfüllen und an `registrierung@hbci-zka.de` senden. Die zugeteilte Nummer kommt i.d.R. in 5–10 Werktagen. Anschließend als Umgebungsvariable setzen:
+**Optional – eigene ID verwenden:** Wer ein eigenes Produkt registriert hat, überschreibt die mitgelieferte ID per Umgebungsvariable:
 
 ```
-FINTS_PRODUCT_ID=<deine-registrierungsnummer>
+FINTS_PRODUCT_ID=<deine-25-stellige-nummer>
 ```
+
+Eine eigene Registrierung ist kostenlos: Formular der [FinTS-Produktregistrierung](https://www.fints.org/de/hersteller/produktregistrierung) ausfüllen und an `registrierung@hbci-zka.de` senden (Nummer kommt i.d.R. in 5–10 Werktagen).
 
 Ein Code-Update ist dafür nicht nötig – nur die Variable setzen und den Container/Server neu starten. Fremde/erfundene Produkt-IDs sind nicht zulässig und werden von Atruvia abgewiesen.
 
