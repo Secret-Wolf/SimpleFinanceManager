@@ -16,8 +16,9 @@
 - Modernisierung (lifespan/ConfigDict), **FinTS-PDF aus Git-Tracking entfernt** (Historie!).
 - Tests: 41 grün, ruff/bandit sauber; Migrationen gegen Bestands-DB-Kopie verifiziert.
 
-**Achtung:** Nichts davon ist im zuletzt gepushten Image (digest `0007d9a6…`).
-Wenn es auf den Server soll: neu bauen & pushen (siehe CLAUDE.md „Deployment").
+**Image gepusht (2026-06-13, digest `fb8f897b…`):** alle o. g. Features sind in
+`192.168.178.30:5000/finanzmanager:latest`. Auf dem Server nur noch:
+`docker compose pull && docker compose up -d` (Migrationen 16+17 laufen automatisch, additiv).
 
 ## Nächste geplante Schritte (besprochen 2026-06-13)
 

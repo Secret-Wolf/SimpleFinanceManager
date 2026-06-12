@@ -124,7 +124,7 @@ Security-relevant actions log JSON lines to `data/logs/audit.log` via `audit.py`
 - **Modernisierung** (this session) — FastAPI `lifespan` statt deprecated `on_event`, Pydantic v2 `ConfigDict` statt `class Config`. **FinTS-Registrierungs-PDF aus dem Git-Tracking entfernt** (enthält Privatadresse; bleibt in der Historie — vor Open-Source-Release frisches Repo nötig, siehe Roadmap).
 
 **In progress (user-side):**
-- Server deploy of the previous image (`192.168.178.30:5000/finanzmanager:latest`, digest `0007d9a6…`) **against the existing production DB** (802 transactions, 376 categorized, 80 categories, 19 rules, 2 users, account "Giro Young" DE36…8800). **Note: this session's features (deep categories, Regel-Sets incl. Migration 16) are committed but NOT yet in that pushed image** — a new build & push is needed before they reach the server.
+- **Image with ALL features above built & pushed 2026-06-13** (`192.168.178.30:5000/finanzmanager:latest`, digest `fb8f897b…`). Server deploy: `docker compose pull && docker compose up -d` **against the existing production DB** (802 transactions, 376 categorized, 80 categories, 19 rules, 2 users, account "Giro Young" DE36…8800). Migrations 16+17 are additive and verified against a copy of an existing DB.
 - **First FinTS sync on the server must use "Umsätze ab" = 2026-04-24** (day after the last manually imported transaction) to avoid overlap duplicates with the old Excel-imported data. FinTS links to the existing account by IBAN — no duplicate account. Backup exists at `~/SimpleFinanceManagerBACKUP` on the server; keep until verified.
 - Open verification: deploy succeeded, login works, transaction count = 802 + new ones, no dupes.
 
