@@ -105,6 +105,23 @@ The `Transaction.id == -1` sentinel is deliberate: a user with zero accounts mus
 
 Security-relevant actions log JSON lines to `data/logs/audit.log` via `audit.py` (IBANs masked); call `log_auth_event` / `log_data_event` for new sensitive operations.
 
+## Project status (Stand 2026-06-12)
+
+**Done & committed (`main`, working tree clean as of `1b7cd0f`):**
+- **FinTS/HBCI online banking** — fully working, **both ING and Volksbank/Atruvia verified end-to-end** with the real DK product-registration ID (shipped as default). Read-only, PIN never persisted, TAN/decoupled flow, dedup against CSV imports.
+- **Security/quality pass** — XSS escaping (`escapeHtml`/`safeColor`), per-user categorizer scoping (was a cross-user bug), SSRF guard on `fints_url`, CSV formula-injection neutralization, banking rate limit, pinned deps.
+- **Tests & CI** — 26 pytest tests (`backend/tests/`), ruff/bandit/pip-audit, GitHub Actions, SECURITY.md, CONTRIBUTING.md, PR/issue templates.
+- **UI rework "Modern Fintech"** — emerald accent, Inter (self-hosted, `frontend/fonts/`), slate neutrals, system-follow theme, responsive mobile layout, redesigned banking cards. CSP relaxed only for style *attributes* (`style-src-attr 'unsafe-inline'`); scripts stay strict.
+
+**In progress (user-side, just initiated):**
+- New image **built & pushed** to the private registry (`192.168.178.30:5000/finanzmanager:latest`, digest `0007d9a6…`). User deploys on the server (`cd ~/SimpleFinanceManager && docker compose pull && docker compose up -d`) **against the existing production DB** (802 transactions, 376 categorized, 80 categories, 19 rules, 2 users, account "Giro Young" DE36…8800). Migration is additive (adds `bank_connections` only).
+- **First FinTS sync on the server must use "Umsätze ab" = 2026-04-24** (day after the last manually imported transaction) to avoid overlap duplicates with the old Excel-imported data. FinTS links to the existing account by IBAN — no duplicate account. Backup exists at `~/SimpleFinanceManagerBACKUP` on the server; keep until verified.
+- Open verification: deploy succeeded, login works, transaction count = 802 + new ones, no dupes.
+
+**Next planned features (user request, not yet started):**
+1. **Deeper category nesting** — currently hard-limited to 2 levels (convention #5). Wanted: more detailed, deeper hierarchies. Touches `routers/categories.py` (depth checks), `full_path` cache, stats roll-up of sub-trees, frontend dropdowns/indentation (`generateCategoryOptions`), budget aggregation.
+2. **Rules UX & rule sets** — (a) active/inactive state is hard to see in the rules list → clear visual indicator (e.g. green/red dot); (b) selectable *rule sets*: user picks which group of rules to run instead of always all (schema addition, e.g. group/tag on `categorization_rules` + checkbox UI + `apply` endpoint parameter; keep per-user scoping & migration pattern).
+
 ## Roadmap & product direction (read before changing the hosting model)
 
 This is intended to become an open-source product (GitHub) and may later ship as a packaged app and/or with optional paid licenses.
