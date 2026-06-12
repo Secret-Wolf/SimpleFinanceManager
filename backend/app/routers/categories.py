@@ -8,6 +8,12 @@ from .. import schemas
 from ..auth import get_current_user
 from ..database import get_db
 from ..models import Category, Transaction, User
+from ..services.category_tree import (
+    MAX_CATEGORY_DEPTH,
+    get_category_depth,
+    get_descendant_ids,
+    get_subtree_height,
+)
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
 
@@ -126,10 +132,11 @@ def create_category(
 ):
     """Create new category"""
 
-    # Check for duplicate name under same parent
+    # Check for duplicate name under same parent (per user)
     existing = db.query(Category).filter(
         Category.name == category_data.name,
-        Category.parent_id == category_data.parent_id
+        Category.parent_id == category_data.parent_id,
+        Category.user_id == current_user.id,
     ).first()
 
     if existing:
@@ -138,17 +145,20 @@ def create_category(
             detail="Kategorie mit diesem Namen existiert bereits"
         )
 
-    # Verify parent exists if specified
+    # Verify parent exists if specified (must belong to the same user)
     if category_data.parent_id:
-        parent = db.query(Category).filter(Category.id == category_data.parent_id).first()
+        parent = db.query(Category).filter(
+            Category.id == category_data.parent_id,
+            Category.user_id == current_user.id,
+        ).first()
         if not parent:
             raise HTTPException(status_code=400, detail="Elternkategorie nicht gefunden")
 
-        # Check max depth (2 levels)
-        if parent.parent_id:
+        # Check max depth: the new category sits one level below its parent
+        if get_category_depth(db, current_user.id, parent.id) >= MAX_CATEGORY_DEPTH:
             raise HTTPException(
                 status_code=400,
-                detail="Maximale Verschachtelungstiefe erreicht (2 Ebenen)"
+                detail=f"Maximale Verschachtelungstiefe erreicht ({MAX_CATEGORY_DEPTH} Ebenen)"
             )
 
     category = Category(
@@ -188,11 +198,12 @@ def update_category(
         raise HTTPException(status_code=404, detail="Kategorie nicht gefunden")
 
     if update.name is not None:
-        # Check for duplicate
+        # Check for duplicate (per user)
         existing = db.query(Category).filter(
             Category.name == update.name,
             Category.parent_id == category.parent_id,
-            Category.id != category_id
+            Category.id != category_id,
+            Category.user_id == current_user.id,
         ).first()
 
         if existing:
@@ -208,21 +219,26 @@ def update_category(
         if update.parent_id == category_id:
             raise HTTPException(status_code=400, detail="Kategorie kann nicht eigene Elternkategorie sein")
 
-        # Check if new parent is a child of this category
+        # Check if new parent lies anywhere within this category's subtree
         if update.parent_id:
-            child_ids = [c.id for c in db.query(Category).filter(Category.parent_id == category_id).all()]
-            if update.parent_id in child_ids:
+            descendant_ids = get_descendant_ids(db, current_user.id, category_id)
+            if update.parent_id in descendant_ids:
                 raise HTTPException(status_code=400, detail="Zirkuläre Referenz nicht erlaubt")
 
-            parent = db.query(Category).filter(Category.id == update.parent_id).first()
+            parent = db.query(Category).filter(
+                Category.id == update.parent_id,
+                Category.user_id == current_user.id,
+            ).first()
             if not parent:
                 raise HTTPException(status_code=400, detail="Elternkategorie nicht gefunden")
 
-            # Check max depth
-            if parent.parent_id:
+            # Check max depth: the moved subtree must still fit below the new parent
+            new_depth = (get_category_depth(db, current_user.id, parent.id)
+                         + get_subtree_height(db, current_user.id, category_id))
+            if new_depth > MAX_CATEGORY_DEPTH:
                 raise HTTPException(
                     status_code=400,
-                    detail="Maximale Verschachtelungstiefe erreicht (2 Ebenen)"
+                    detail=f"Maximale Verschachtelungstiefe erreicht ({MAX_CATEGORY_DEPTH} Ebenen)"
                 )
 
         category.parent_id = update.parent_id if update.parent_id != 0 else None
@@ -276,7 +292,10 @@ def delete_category(
 
     # Move or uncategorize transactions
     if move_to_category_id:
-        target = db.query(Category).filter(Category.id == move_to_category_id).first()
+        target = db.query(Category).filter(
+            Category.id == move_to_category_id,
+            Category.user_id == current_user.id,
+        ).first()
         if not target:
             raise HTTPException(status_code=400, detail="Zielkategorie nicht gefunden")
 

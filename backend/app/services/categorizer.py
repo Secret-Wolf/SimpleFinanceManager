@@ -99,12 +99,18 @@ def _user_account_ids(db: Session, user_id: int) -> List[int]:
     return [a.id for a in db.query(Account.id).filter(Account.user_id == user_id).all()]
 
 
-def _active_rules_for_user(db: Session, user_id: int) -> List[CategorizationRule]:
-    """Active rules belonging to one user, highest priority first."""
-    return db.query(CategorizationRule).filter(
+def _active_rules_for_user(db: Session, user_id: int, rule_ids: Optional[List[int]] = None) -> List[CategorizationRule]:
+    """Active rules belonging to one user, highest priority first.
+
+    rule_ids optionally restricts to a selection (Regel-Sets); IDs of other
+    users' rules are silently dropped by the user_id filter."""
+    query = db.query(CategorizationRule).filter(
         CategorizationRule.is_active == True,
         CategorizationRule.user_id == user_id,
-    ).order_by(CategorizationRule.priority.desc()).all()
+    )
+    if rule_ids is not None:
+        query = query.filter(CategorizationRule.id.in_(rule_ids))
+    return query.order_by(CategorizationRule.priority.desc()).all()
 
 
 def _first_matching_rule(rules: List[CategorizationRule], transaction: Transaction) -> Optional[dict]:
@@ -119,13 +125,14 @@ def categorize_transaction(db: Session, transaction: Transaction, user_id: int) 
     return _first_matching_rule(_active_rules_for_user(db, user_id), transaction)
 
 
-def apply_rules_to_uncategorized(db: Session, user_id: int) -> int:
+def apply_rules_to_uncategorized(db: Session, user_id: int, rule_ids: Optional[List[int]] = None) -> int:
     """Apply the user's rules to the user's uncategorized transactions. Returns count.
 
     User-scoped: only the user's own accounts' transactions and own rules are touched
-    (a user's rules must never categorize another user's transactions)."""
+    (a user's rules must never categorize another user's transactions).
+    rule_ids optionally restricts which rules run (Regel-Sets)."""
     account_ids = _user_account_ids(db, user_id)
-    rules = _active_rules_for_user(db, user_id)
+    rules = _active_rules_for_user(db, user_id, rule_ids)
     if not account_ids or not rules:
         return 0
 
@@ -148,10 +155,11 @@ def apply_rules_to_uncategorized(db: Session, user_id: int) -> int:
     return categorized_count
 
 
-def apply_rules_to_all(db: Session, user_id: int) -> int:
-    """Apply the user's rules to ALL their transactions, overwriting categories. Returns count."""
+def apply_rules_to_all(db: Session, user_id: int, rule_ids: Optional[List[int]] = None) -> int:
+    """Apply the user's rules to ALL their transactions, overwriting categories. Returns count.
+    rule_ids optionally restricts which rules run (Regel-Sets)."""
     account_ids = _user_account_ids(db, user_id)
-    rules = _active_rules_for_user(db, user_id)
+    rules = _active_rules_for_user(db, user_id, rule_ids)
     if not account_ids or not rules:
         return 0
 

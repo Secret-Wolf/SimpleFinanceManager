@@ -322,6 +322,7 @@ class SplitTransactionCreate(BaseModel):
 class RuleBase(BaseModel):
     name: Optional[str] = None
     priority: int = 0
+    group_name: Optional[str] = None
     match_counterpart_name: Optional[str] = None
     match_counterpart_iban: Optional[str] = None
     match_purpose: Optional[str] = None
@@ -340,6 +341,7 @@ class RuleCreate(RuleBase):
 class RuleUpdate(BaseModel):
     name: Optional[str] = None
     priority: Optional[int] = None
+    group_name: Optional[str] = None
     match_counterpart_name: Optional[str] = None
     match_counterpart_iban: Optional[str] = None
     match_purpose: Optional[str] = None
@@ -358,6 +360,12 @@ class Rule(RuleBase):
 
     class Config:
         from_attributes = True
+
+
+class RuleApplyRequest(BaseModel):
+    """Optionale Auswahl, welche Regeln bei /api/rules/apply laufen.
+    Ohne Body (oder rule_ids=None) laufen wie bisher alle aktiven Regeln."""
+    rule_ids: Optional[List[int]] = None
 
 
 # Bank Connection (FinTS) Schemas

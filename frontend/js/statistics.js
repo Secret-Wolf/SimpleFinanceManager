@@ -70,10 +70,10 @@ async function loadCategoryStats() {
         }
         const stats = await api.getStatsByCategory(params);
 
-        // Render chart
+        // Render chart (top-level categories with rolled-up subtree totals)
         renderCategoryChart(stats.categories.filter(c => c.total > 0).slice(0, 10));
 
-        // Render table
+        // Render table (subtree rows indented below their parents)
         tableContainer.innerHTML = `
             <table>
                 <thead>
@@ -85,19 +85,7 @@ async function loadCategoryStats() {
                     </tr>
                 </thead>
                 <tbody>
-                    ${stats.categories.filter(c => c.total > 0).map(cat => `
-                        <tr>
-                            <td>
-                                <span class="category-badge">
-                                    <span class="dot" style="background-color: ${safeColor(cat.category_color)}"></span>
-                                    ${escapeHtml(cat.category_name)}
-                                </span>
-                            </td>
-                            <td class="text-right amount negative">${formatCurrency(cat.total)}</td>
-                            <td class="text-right">${formatCurrency(cat.average_monthly)}</td>
-                            <td class="text-right">${cat.transaction_count}</td>
-                        </tr>
-                    `).join('')}
+                    ${renderCategoryStatsRows(stats.categories)}
                 </tbody>
                 <tfoot>
                     <tr style="font-weight: 600;">
@@ -119,6 +107,37 @@ async function loadCategoryStats() {
     } catch (error) {
         container.innerHTML = `<p style="color: var(--danger-color)">Fehler: ${escapeHtml(error.message)}</p>`;
     }
+}
+
+// Recursive table rows: parents show rolled-up subtree totals, children are indented
+function renderCategoryStatsRows(cats, level = 0) {
+    let html = '';
+
+    for (const cat of cats) {
+        if (!(cat.total > 0)) continue;
+
+        const hasChildren = cat.children && cat.children.some(c => c.total > 0);
+        html += `
+            <tr${level > 0 ? ' class="stats-subcategory-row"' : ''}>
+                <td>
+                    <span class="category-badge" style="margin-left: ${level * 20}px;">
+                        <span class="dot" style="background-color: ${safeColor(cat.category_color)}"></span>
+                        ${escapeHtml(cat.category_name)}
+                    </span>
+                    ${hasChildren && level === 0 ? '<small style="color: var(--text-muted); margin-left: 6px;">inkl. Unterkategorien</small>' : ''}
+                </td>
+                <td class="text-right amount negative">${formatCurrency(cat.total)}</td>
+                <td class="text-right">${formatCurrency(cat.average_monthly)}</td>
+                <td class="text-right">${cat.transaction_count}</td>
+            </tr>
+        `;
+
+        if (cat.children && cat.children.length > 0) {
+            html += renderCategoryStatsRows(cat.children, level + 1);
+        }
+    }
+
+    return html;
 }
 
 async function loadTimeStats() {
@@ -323,12 +342,19 @@ async function exportStats() {
         }
         const stats = await api.getStatsByCategory(params);
 
-        // Create CSV
+        // Create CSV (subtrees flattened with full path, totals rolled up)
         let csv = 'Kategorie;Summe;Durchschnitt/Monat;Anzahl\n';
 
-        for (const cat of stats.categories) {
-            csv += `${csvCell(cat.category_name)};${cat.total};${cat.average_monthly};${cat.transaction_count}\n`;
-        }
+        const writeRows = (cats, parentPath) => {
+            for (const cat of cats) {
+                const path = parentPath ? `${parentPath} > ${cat.category_name}` : cat.category_name;
+                csv += `${csvCell(path)};${cat.total};${cat.average_monthly};${cat.transaction_count}\n`;
+                if (cat.children && cat.children.length > 0) {
+                    writeRows(cat.children, path);
+                }
+            }
+        };
+        writeRows(stats.categories, '');
 
         csv += `\n"Einnahmen gesamt";${stats.total_income};\n`;
         csv += `"Ausgaben gesamt";${stats.total_expenses};\n`;

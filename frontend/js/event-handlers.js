@@ -99,6 +99,12 @@
         },
         navigateTo: function (el) {
             navigateTo(el.dataset.value);
+        },
+        toggleApplyRulesGroup: function (el) {
+            toggleApplyRulesGroup(el);
+        },
+        syncApplyRulesGroup: function (el) {
+            syncApplyRulesGroup(el);
         }
     };
 

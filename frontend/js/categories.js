@@ -46,7 +46,7 @@ function renderCategoryTree(cats, level = 0) {
                             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                         </svg>
                     </button>
-                    ${level === 0 ? `
+                    ${level < MAX_CATEGORY_DEPTH - 1 ? `
                         <button class="btn btn-sm btn-icon" data-action="addSubcategory" data-id="${cat.id}" title="Unterkategorie hinzufügen">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -72,6 +72,35 @@ function renderCategoryTree(cats, level = 0) {
     return html;
 }
 
+// Options for the parent select: all levels (indented), excluding the edited
+// category's own subtree and parents where the depth limit would be exceeded.
+function generateParentOptions(selectedParentId = null, excludeId = null) {
+    const excludedIds = excludeId
+        ? new Set([excludeId, ...getCategoryDescendantIds(flatCategories, excludeId)])
+        : new Set();
+    // Beim Verschieben zählt die Höhe des eigenen Teilbaums mit
+    const subtreeHeight = excludeId ? getCategorySubtreeHeight(flatCategories, excludeId) : 1;
+
+    let html = '<option value="">Keine (Hauptkategorie)</option>';
+
+    const walk = (cats, level) => {
+        for (const cat of cats) {
+            if (excludedIds.has(cat.id)) continue;
+            if (level + 1 + subtreeHeight <= MAX_CATEGORY_DEPTH) {
+                const prefix = level > 0 ? '&nbsp;&nbsp;'.repeat(level) + '↳ ' : '';
+                const selected = cat.id === selectedParentId ? 'selected' : '';
+                html += `<option value="${cat.id}" ${selected}>${prefix}${escapeHtml(cat.name)}</option>`;
+            }
+            if (cat.children && cat.children.length > 0) {
+                walk(cat.children, level + 1);
+            }
+        }
+    };
+
+    walk(categories, 0);
+    return html;
+}
+
 function showAddCategoryModal() {
     document.getElementById('category-modal-title').textContent = 'Neue Kategorie';
     document.getElementById('category-form').reset();
@@ -79,10 +108,7 @@ function showAddCategoryModal() {
     document.getElementById('category-color').value = randomColor();
 
     // Update parent select
-    document.getElementById('category-parent').innerHTML = `
-        <option value="">Keine (Hauptkategorie)</option>
-        ${categories.filter(c => !c.parent_id).map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}
-    `;
+    document.getElementById('category-parent').innerHTML = generateParentOptions();
 
     openModal('category-modal');
 }
@@ -97,12 +123,7 @@ function addSubcategory(parentId) {
     document.getElementById('category-color').value = adjustColor(parent.color || '#888888', -20);
 
     // Set parent
-    document.getElementById('category-parent').innerHTML = `
-        <option value="">Keine (Hauptkategorie)</option>
-        ${categories.filter(c => !c.parent_id).map(c =>
-            `<option value="${c.id}" ${c.id === parentId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`
-        ).join('')}
-    `;
+    document.getElementById('category-parent').innerHTML = generateParentOptions(parentId);
 
     openModal('category-modal');
 }
@@ -117,13 +138,8 @@ async function editCategory(id) {
     document.getElementById('category-color').value = cat.color || '#888888';
     document.getElementById('category-budget').value = cat.budget_monthly || '';
 
-    // Update parent select (exclude self and children)
-    document.getElementById('category-parent').innerHTML = `
-        <option value="">Keine (Hauptkategorie)</option>
-        ${categories.filter(c => !c.parent_id && c.id !== id).map(c =>
-            `<option value="${c.id}" ${c.id === cat.parent_id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`
-        ).join('')}
-    `;
+    // Update parent select (exclude self and all descendants)
+    document.getElementById('category-parent').innerHTML = generateParentOptions(cat.parent_id, id);
 
     openModal('category-modal');
 }
@@ -142,7 +158,8 @@ async function saveCategory() {
 
     const data = {
         name,
-        parent_id: parentId ? parseInt(parentId) : null,
+        // PATCH: null = keine Änderung, 0 = zur Hauptkategorie machen
+        parent_id: parentId ? parseInt(parentId) : (id ? 0 : null),
         color,
         budget_monthly: budget ? parseFloat(budget) : null
     };

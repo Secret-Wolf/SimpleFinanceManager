@@ -236,6 +236,34 @@ function flattenCategories(categories, result = []) {
     return result;
 }
 
+// Maximale Verschachtelungstiefe für Kategorien (muss zum Backend passen:
+// MAX_CATEGORY_DEPTH in backend/app/services/category_tree.py)
+const MAX_CATEGORY_DEPTH = 5;
+
+// All category ids strictly below the given id (any depth), based on flatCategories
+function getCategoryDescendantIds(flatCats, id) {
+    const result = [];
+    const stack = [id];
+    while (stack.length > 0) {
+        const current = stack.pop();
+        for (const cat of flatCats) {
+            if (cat.parent_id === current) {
+                result.push(cat.id);
+                stack.push(cat.id);
+            }
+        }
+    }
+    return result;
+}
+
+// Height of the subtree rooted at id (1 = no children)
+function getCategorySubtreeHeight(flatCats, id) {
+    const childHeights = flatCats
+        .filter(c => c.parent_id === id)
+        .map(c => getCategorySubtreeHeight(flatCats, c.id));
+    return childHeights.length > 0 ? 1 + Math.max(...childHeights) : 1;
+}
+
 // Calculate percentage change
 function percentChange(current, previous) {
     if (!previous || previous === 0) return null;

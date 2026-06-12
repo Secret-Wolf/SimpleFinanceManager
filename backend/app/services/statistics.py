@@ -260,7 +260,12 @@ def get_stats_by_category(
     user_account_ids: List[int] = None,
     user_id: int = None
 ) -> schemas.StatsByCategory:
-    """Get statistics grouped by category"""
+    """Get statistics grouped by category.
+
+    Returns top-level categories with nested `children`; totals/counts are
+    rolled up over the whole subtree (Teilbaum-Roll-up). total_income/
+    total_expenses are computed from each category's own transactions, so
+    nothing is double-counted."""
 
     # Calculate months in period for average
     months = max(1, (end_date.year - start_date.year) * 12 + end_date.month - start_date.month + 1)
@@ -294,27 +299,56 @@ def get_stats_by_category(
         and_(*join_conditions)
     ).group_by(Category.id).all()
 
-    # Build category stats
-    categories = []
+    # Per-category raw values (signed), keyed by id
+    nodes = {}
     total_income = Decimal("0")
     total_expenses = Decimal("0")
 
     for r in query:
-        total = r.total or Decimal("0")
+        own_total = r.total or Decimal("0")
 
-        if total > 0:
-            total_income += total
+        if own_total > 0:
+            total_income += own_total
         else:
-            total_expenses += abs(total)
+            total_expenses += abs(own_total)
 
-        categories.append(schemas.CategoryStats(
-            category_id=r.id,
-            category_name=r.name,
-            category_color=r.color,
-            total=abs(total),
-            average_monthly=abs(total) / months,
-            transaction_count=r.count or 0
-        ))
+        nodes[r.id] = {
+            "name": r.name,
+            "color": r.color,
+            "parent_id": r.parent_id,
+            "own_total": own_total,
+            "own_count": r.count or 0,
+        }
+
+    # Tree structure (orphaned parent_ids are treated as top-level)
+    children_of = {}
+    for cid, n in nodes.items():
+        pid = n["parent_id"] if n["parent_id"] in nodes else None
+        children_of.setdefault(pid, []).append(cid)
+
+    def build_subtree(node_id):
+        """Returns (CategoryStats with rolled-up totals, signed subtree total)."""
+        node = nodes[node_id]
+        child_stats = []
+        signed_total = node["own_total"]
+        count = node["own_count"]
+        for child_id in children_of.get(node_id, []):
+            stats, child_signed = build_subtree(child_id)
+            child_stats.append(stats)
+            signed_total += child_signed
+            count += stats.transaction_count
+        child_stats.sort(key=lambda x: x.total, reverse=True)
+        return schemas.CategoryStats(
+            category_id=node_id,
+            category_name=node["name"],
+            category_color=node["color"],
+            total=abs(signed_total),
+            average_monthly=abs(signed_total) / months,
+            transaction_count=count,
+            children=child_stats
+        ), signed_total
+
+    categories = [build_subtree(root_id)[0] for root_id in children_of.get(None, [])]
 
     # Add uncategorized
     uncat_query = db.query(

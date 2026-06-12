@@ -141,6 +141,7 @@ class CategorizationRule(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String)
     priority = Column(Integer, default=0)
+    group_name = Column(String)  # optionales Regel-Set ("Gruppe"); NULL = ohne Gruppe
 
     # Matching-Kriterien
     match_counterpart_name = Column(String)  # LIKE-Pattern

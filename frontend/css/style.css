@@ -1188,6 +1188,109 @@ input[type="radio"] {
     border-left: 4px solid var(--primary-color);
 }
 
+/* Rules: Aktiv/Inaktiv-Status */
+.rule-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.813rem;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.rule-status .status-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.rule-status.active {
+    color: var(--success-color);
+}
+
+.rule-status.active .status-dot {
+    background-color: var(--success-color);
+    box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.18);
+}
+
+.rule-status.inactive {
+    color: var(--danger-color);
+}
+
+.rule-status.inactive .status-dot {
+    background-color: var(--danger-color);
+    box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.15);
+}
+
+/* Inaktive Regeln zurücknehmen, Status-Zelle bleibt voll lesbar */
+tr.rule-row-inactive td {
+    opacity: 0.55;
+}
+
+tr.rule-row-inactive .rule-status {
+    opacity: 1;
+}
+
+/* Rules: Gruppen-Badge (Regel-Sets) */
+.rule-group-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    background-color: var(--bg-tertiary);
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+/* "Regeln anwenden"-Modal: Gruppenauswahl */
+.apply-rules-group {
+    margin-bottom: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.apply-rules-group-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background-color: var(--bg-secondary);
+    cursor: pointer;
+}
+
+.apply-rules-group-count {
+    margin-left: auto;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.apply-rules-group-rules {
+    padding: 4px 12px 8px 12px;
+}
+
+.apply-rules-rule {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0 6px 22px;
+    cursor: pointer;
+    font-size: 0.875rem;
+}
+
+.apply-rules-rule .category-badge {
+    margin-left: auto;
+}
+
+/* Statistik: eingerückte Unterkategorie-Zeilen (Teilbaum-Roll-up) */
+.stats-subcategory-row td {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
 /* Profiles Page */
 .profiles-grid {
     display: grid;

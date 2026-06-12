@@ -1,11 +1,15 @@
 // Rules Module
 
+// Zuletzt geladene Regeln (für Gruppen-Datalist und das "Regeln anwenden"-Modal)
+let allRules = [];
+
 async function loadRules() {
     const container = document.getElementById('rules-list');
     container.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
 
     try {
         const rules = await api.getRules();
+        allRules = rules;
 
         if (rules.length === 0) {
             container.innerHTML = `
@@ -28,6 +32,7 @@ async function loadRules() {
                         <tr>
                             <th>Priorität</th>
                             <th>Name</th>
+                            <th>Gruppe</th>
                             <th>Kriterien</th>
                             <th>Kategorie</th>
                             <th>Status</th>
@@ -36,9 +41,12 @@ async function loadRules() {
                     </thead>
                     <tbody>
                         ${rules.map(rule => `
-                            <tr data-id="${rule.id}">
+                            <tr data-id="${rule.id}" class="${rule.is_active ? '' : 'rule-row-inactive'}">
                                 <td>${rule.priority}</td>
                                 <td>${escapeHtml(rule.name || '-')}</td>
+                                <td>
+                                    ${rule.group_name ? `<span class="rule-group-badge">${escapeHtml(rule.group_name)}</span>` : '<span style="color: var(--text-muted)">–</span>'}
+                                </td>
                                 <td>
                                     ${getRuleCriteriaText(rule)}
                                 </td>
@@ -51,8 +59,8 @@ async function loadRules() {
                                     ` : '-'}
                                 </td>
                                 <td>
-                                    <span style="color: ${rule.is_active ? 'var(--success-color)' : 'var(--text-muted)'}">
-                                        ${rule.is_active ? 'Aktiv' : 'Inaktiv'}
+                                    <span class="rule-status ${rule.is_active ? 'active' : 'inactive'}" title="${rule.is_active ? 'Regel ist aktiv' : 'Regel ist inaktiv'}">
+                                        <span class="status-dot"></span>${rule.is_active ? 'Aktiv' : 'Inaktiv'}
                                     </span>
                                     ${rule.assign_shared ? '<span class="shared-badge" title="Markiert als gemeinsam" style="margin-left: 4px;">G</span>' : ''}
                                 </td>
@@ -118,12 +126,31 @@ function getRuleCriteriaText(rule) {
         '<small style="color: var(--text-muted)">Keine Kriterien</small>';
 }
 
+// Distinct group names of the user's rules (for datalist + apply modal)
+function getRuleGroups() {
+    const groups = [];
+    for (const rule of allRules) {
+        if (rule.group_name && !groups.includes(rule.group_name)) {
+            groups.push(rule.group_name);
+        }
+    }
+    return groups.sort((a, b) => a.localeCompare(b, 'de'));
+}
+
+function updateRuleGroupDatalist() {
+    const datalist = document.getElementById('rule-group-datalist');
+    if (datalist) {
+        datalist.innerHTML = getRuleGroups().map(g => `<option value="${escapeHtml(g)}"></option>`).join('');
+    }
+}
+
 function showAddRuleModal() {
     document.getElementById('rule-modal-title').textContent = 'Neue Regel';
     document.getElementById('rule-form').reset();
     document.getElementById('rule-id').value = '';
     document.getElementById('rule-active').checked = true;
     document.getElementById('rule-assign-shared').checked = false;
+    updateRuleGroupDatalist();
 
     // Update category select
     document.getElementById('rule-assign-category').innerHTML = `
@@ -142,6 +169,8 @@ async function editRule(id) {
         document.getElementById('rule-id').value = rule.id;
         document.getElementById('rule-name').value = rule.name || '';
         document.getElementById('rule-priority').value = rule.priority || 0;
+        document.getElementById('rule-group').value = rule.group_name || '';
+        updateRuleGroupDatalist();
         document.getElementById('rule-counterpart').value = rule.match_counterpart_name || '';
         document.getElementById('rule-iban').value = rule.match_counterpart_iban || '';
         document.getElementById('rule-purpose').value = rule.match_purpose || '';
@@ -168,6 +197,7 @@ async function saveRule() {
     const id = document.getElementById('rule-id').value;
     const name = document.getElementById('rule-name').value.trim();
     const priority = parseInt(document.getElementById('rule-priority').value) || 0;
+    const groupName = document.getElementById('rule-group').value.trim();
     const categoryId = document.getElementById('rule-assign-category').value;
     const isActive = document.getElementById('rule-active').checked;
 
@@ -194,6 +224,7 @@ async function saveRule() {
     const data = {
         name: name || null,
         priority,
+        group_name: groupName,  // "" löscht die Gruppe (PATCH: null = keine Änderung)
         assign_category_id: parseInt(categoryId),
         is_active: isActive,
         assign_shared: assignShared,
@@ -244,14 +275,117 @@ async function deleteRule(id) {
     }
 }
 
-async function applyAllRules(overwrite = false) {
-    if (overwrite) {
-        if (!confirm('Alle Transaktionen neu kategorisieren? Bereits zugewiesene Kategorien werden überschrieben.')) return;
+// --- "Regeln anwenden" mit Auswahl (Regel-Sets) ---
+
+async function showApplyRulesModal() {
+    // Make sure we have the latest rules (button is also reachable right after page load)
+    if (allRules.length === 0) {
+        try {
+            allRules = await api.getRules();
+        } catch (error) {
+            showToast('Fehler: ' + error.message, 'error');
+            return;
+        }
     }
 
+    const activeRules = allRules.filter(r => r.is_active);
+    const container = document.getElementById('apply-rules-selection');
+
+    if (activeRules.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-muted);">Keine aktiven Regeln vorhanden.</p>';
+    } else {
+        // Gruppieren: benannte Gruppen alphabetisch, "Ohne Gruppe" zuletzt
+        const groups = new Map();
+        for (const rule of activeRules) {
+            const key = rule.group_name || '';
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(rule);
+        }
+        const sortedKeys = [...groups.keys()].sort((a, b) => {
+            if (a === '') return 1;
+            if (b === '') return -1;
+            return a.localeCompare(b, 'de');
+        });
+
+        container.innerHTML = sortedKeys.map((key, index) => {
+            const rules = groups.get(key);
+            const groupKey = `g${index}`;
+            return `
+                <div class="apply-rules-group">
+                    <label class="apply-rules-group-header">
+                        <input type="checkbox" checked data-action="toggleApplyRulesGroup" data-group-key="${groupKey}">
+                        <strong>${key ? escapeHtml(key) : 'Ohne Gruppe'}</strong>
+                        <span class="apply-rules-group-count">${rules.length}</span>
+                    </label>
+                    <div class="apply-rules-group-rules">
+                        ${rules.map(rule => `
+                            <label class="apply-rules-rule">
+                                <input type="checkbox" checked class="apply-rule-checkbox" value="${rule.id}"
+                                       data-action="syncApplyRulesGroup" data-group-key="${groupKey}">
+                                <span>${escapeHtml(rule.name || getPlainRuleCriteria(rule))}</span>
+                                ${rule.category ? `
+                                    <span class="category-badge">
+                                        <span class="dot" style="background-color: ${safeColor(rule.category.color)}"></span>
+                                        ${escapeHtml(rule.category.name)}
+                                    </span>
+                                ` : ''}
+                            </label>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    document.getElementById('apply-rules-overwrite').checked = false;
+    openModal('apply-rules-modal');
+}
+
+// Kurzbeschreibung für Regeln ohne Namen (reiner Text, wird escaped eingesetzt)
+function getPlainRuleCriteria(rule) {
+    if (rule.match_counterpart_name) return `Empfänger: ${rule.match_counterpart_name}`;
+    if (rule.match_purpose) return `Zweck: ${rule.match_purpose}`;
+    if (rule.match_counterpart_iban) return `IBAN: ${rule.match_counterpart_iban}`;
+    if (rule.match_booking_type) return `Buchungsart: ${rule.match_booking_type}`;
+    return `Regel #${rule.id}`;
+}
+
+// Gruppen-Checkbox schaltet alle Regeln der Gruppe (called via CLICK_ACTIONS)
+function toggleApplyRulesGroup(el) {
+    const groupKey = el.dataset.groupKey;
+    document.querySelectorAll(`.apply-rule-checkbox[data-group-key="${groupKey}"]`)
+        .forEach(cb => { cb.checked = el.checked; });
+}
+
+// Regel-Checkbox aktualisiert den Zustand ihrer Gruppen-Checkbox
+function syncApplyRulesGroup(el) {
+    const groupKey = el.dataset.groupKey;
+    const boxes = [...document.querySelectorAll(`.apply-rule-checkbox[data-group-key="${groupKey}"]`)];
+    const groupBox = document.querySelector(`input[data-action="toggleApplyRulesGroup"][data-group-key="${groupKey}"]`);
+    if (!groupBox) return;
+    const checkedCount = boxes.filter(cb => cb.checked).length;
+    groupBox.checked = checkedCount === boxes.length;
+    groupBox.indeterminate = checkedCount > 0 && checkedCount < boxes.length;
+}
+
+async function confirmApplyRules() {
+    const selectedIds = [...document.querySelectorAll('.apply-rule-checkbox:checked')]
+        .map(cb => parseInt(cb.value));
+
+    if (selectedIds.length === 0) {
+        showToast('Bitte mindestens eine Regel auswählen', 'error');
+        return;
+    }
+
+    const overwrite = document.getElementById('apply-rules-overwrite').checked;
+    const totalActive = allRules.filter(r => r.is_active).length;
+    // Alles ausgewählt → ohne Einschränkung anwenden (wie bisher)
+    const ruleIds = selectedIds.length === totalActive ? null : selectedIds;
+
     try {
-        const result = await api.applyRules(overwrite);
+        const result = await api.applyRules(overwrite, ruleIds);
         showToast(result.message, 'success');
+        closeModal('apply-rules-modal');
 
         if (currentPage === 'dashboard') {
             loadDashboard();

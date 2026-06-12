@@ -17,6 +17,7 @@ from ..audit import log_data_event
 from ..auth import get_current_user
 from ..database import get_db
 from ..models import Account, Category, Transaction, User
+from ..services.category_tree import get_descendant_ids
 
 logger = logging.getLogger(__name__)
 
@@ -74,10 +75,8 @@ def get_transactions(
 
     if category_id:
         if include_subcategories:
-            # Get category and all its children
-            category_ids = [category_id]
-            children = db.query(Category.id).filter(Category.parent_id == category_id).all()
-            category_ids.extend([c.id for c in children])
+            # Get category and all its descendants (any depth)
+            category_ids = [category_id] + get_descendant_ids(db, current_user.id, category_id)
             query = query.filter(Transaction.category_id.in_(category_ids))
         else:
             query = query.filter(Transaction.category_id == category_id)

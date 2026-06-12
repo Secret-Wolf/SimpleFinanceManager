@@ -292,4 +292,15 @@ def run_migrations():
             conn.commit()
             logger.info("Migration: bank_connections table created")
 
+        # Migration 16: Add group_name to categorization_rules (Regel-Sets)
+        if 'categorization_rules' in inspector.get_table_names():
+            columns = [col['name'] for col in inspector.get_columns('categorization_rules')]
+            if 'group_name' not in columns:
+                logger.info("Migration: Adding group_name to categorization_rules")
+                conn.execute(text("""
+                    ALTER TABLE categorization_rules ADD COLUMN group_name VARCHAR(100)
+                """))
+                conn.commit()
+                logger.info("Migration: group_name added to categorization_rules")
+
         logger.info("All migrations completed")

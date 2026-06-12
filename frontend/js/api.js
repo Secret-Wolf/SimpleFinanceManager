@@ -184,9 +184,10 @@ class ApiClient {
         });
     }
 
-    async applyRules(overwrite = false) {
+    async applyRules(overwrite = false, ruleIds = null) {
         return this.request(`/rules/apply?overwrite=${overwrite}`, {
-            method: 'POST'
+            method: 'POST',
+            ...(ruleIds ? { body: { rule_ids: ruleIds } } : {})
         });
     }
 

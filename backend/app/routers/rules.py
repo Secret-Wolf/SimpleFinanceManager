@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
@@ -48,8 +48,11 @@ def create_rule(
 ):
     """Create new categorization rule"""
 
-    # Verify category exists
-    category = db.query(Category).filter(Category.id == rule_data.assign_category_id).first()
+    # Verify category exists and belongs to user
+    category = db.query(Category).filter(
+        Category.id == rule_data.assign_category_id,
+        Category.user_id == current_user.id,
+    ).first()
     if not category:
         raise HTTPException(status_code=400, detail="Kategorie nicht gefunden")
 
@@ -72,6 +75,7 @@ def create_rule(
     rule = CategorizationRule(
         name=rule_data.name,
         priority=rule_data.priority,
+        group_name=(rule_data.group_name or "").strip() or None,
         user_id=current_user.id,
         match_counterpart_name=rule_data.match_counterpart_name,
         match_counterpart_iban=rule_data.match_counterpart_iban,
@@ -118,6 +122,9 @@ def update_rule(
     if update.priority is not None:
         rule.priority = update.priority
 
+    if update.group_name is not None:
+        rule.group_name = update.group_name.strip() or None
+
     if update.match_counterpart_name is not None:
         rule.match_counterpart_name = update.match_counterpart_name or None
 
@@ -137,7 +144,10 @@ def update_rule(
         rule.match_amount_max = update.match_amount_max
 
     if update.assign_category_id is not None:
-        category = db.query(Category).filter(Category.id == update.assign_category_id).first()
+        category = db.query(Category).filter(
+            Category.id == update.assign_category_id,
+            Category.user_id == current_user.id,
+        ).first()
         if not category:
             raise HTTPException(status_code=400, detail="Kategorie nicht gefunden")
         rule.assign_category_id = update.assign_category_id
@@ -179,15 +189,19 @@ def delete_rule(rule_id: int, db: Session = Depends(get_db), current_user: User 
 @router.post("/apply")
 def apply_rules(
     overwrite: bool = False,
+    selection: Optional[schemas.RuleApplyRequest] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Apply all rules to transactions.
+    """Apply rules to transactions. Without a body all active rules run;
+    an optional body {"rule_ids": [...]} restricts which rules run (Regel-Sets).
     If overwrite=True, re-categorizes already categorized transactions too."""
+    rule_ids = selection.rule_ids if selection else None
+
     if overwrite:
-        count = apply_rules_to_all(db, current_user.id)
+        count = apply_rules_to_all(db, current_user.id, rule_ids=rule_ids)
     else:
-        count = apply_rules_to_uncategorized(db, current_user.id)
+        count = apply_rules_to_uncategorized(db, current_user.id, rule_ids=rule_ids)
 
     return {
         "message": f"{count} Transaktionen kategorisiert",
