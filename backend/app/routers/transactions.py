@@ -18,6 +18,7 @@ from ..auth import get_current_user
 from ..database import get_db
 from ..models import Account, Category, Transaction, User
 from ..services.category_tree import get_descendant_ids
+from ..services.transfers import detect_transfers_for_user
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,7 @@ def get_transactions(
     account_id: Optional[int] = None,
     account_iban: Optional[str] = None,
     shared_only: bool = False,
+    transfers_only: bool = False,
     amount_type: Optional[str] = Query(None, pattern="^(income|expenses|all)$"),
     search: Optional[str] = None,
     uncategorized_only: bool = False,
@@ -82,7 +84,8 @@ def get_transactions(
             query = query.filter(Transaction.category_id == category_id)
 
     if uncategorized_only:
-        query = query.filter(Transaction.category_id == None)
+        # Umbuchungen brauchen keine Kategorie — hier ausblenden
+        query = query.filter(Transaction.category_id == None, Transaction.is_transfer == False)
 
     if account_id:
         query = query.filter(Transaction.account_id == account_id)
@@ -91,6 +94,9 @@ def get_transactions(
 
     if shared_only:
         query = query.filter(Transaction.is_shared == True)
+
+    if transfers_only:
+        query = query.filter(Transaction.is_transfer == True)
 
     if amount_type == "income":
         query = query.filter(Transaction.amount > 0)
@@ -176,7 +182,7 @@ def export_transactions(
     writer.writerow([
         'Datum', 'Wertstellung', 'Empfänger/Auftraggeber', 'IBAN', 'BIC',
         'Buchungsart', 'Verwendungszweck', 'Betrag', 'Währung', 'Saldo danach',
-        'Kategorie', 'Konto', 'Bank', 'Gemeinsam', 'Notizen'
+        'Kategorie', 'Konto', 'Bank', 'Gemeinsam', 'Umbuchung', 'Notizen'
     ])
 
     for tx in transactions:
@@ -196,6 +202,7 @@ def export_transactions(
             _csv_safe(tx.account_name),
             _csv_safe(tx.bank_name),
             'Ja' if tx.is_shared else 'Nein',
+            'Ja' if tx.is_transfer else 'Nein',
             _csv_safe(tx.notes)
         ])
 
@@ -270,6 +277,9 @@ def update_transaction(
         transaction.is_shared = update.is_shared
         if not update.is_shared:
             transaction.shared_household_id = None
+
+    if update.is_transfer is not None:
+        transaction.is_transfer = update.is_transfer
 
     if update.shared_household_id is not None:
         transaction.shared_household_id = update.shared_household_id if update.shared_household_id != 0 else None
@@ -429,6 +439,20 @@ def delete_transaction(transaction_id: int, db: Session = Depends(get_db), curre
     )
 
     return {"message": "Transaktion gelöscht"}
+
+
+@router.post("/detect-transfers")
+def detect_transfers(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Markiert Buchungen zwischen eigenen Konten als Umbuchung (is_transfer).
+    Läuft auch automatisch nach jedem CSV-/FinTS-Import."""
+    count = detect_transfers_for_user(db, current_user.id)
+    return {
+        "message": f"{count} Umbuchungen erkannt",
+        "detected_count": count
+    }
 
 
 @router.post("/bulk-categorize")

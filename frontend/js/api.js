@@ -155,6 +155,20 @@ class ApiClient {
         });
     }
 
+    async detectTransfers() {
+        return this.request('/transactions/detect-transfers', {
+            method: 'POST'
+        });
+    }
+
+    // Backup (admin)
+    async restoreBackup(formData) {
+        return this.request('/backup/restore', {
+            method: 'POST',
+            body: formData
+        });
+    }
+
     // Rules
     async getRules() {
         return this.request('/rules');
@@ -239,6 +253,11 @@ class ApiClient {
     async getSharedSummary(params = {}) {
         const query = new URLSearchParams(params);
         return this.request(`/stats/shared-summary?${query}`);
+    }
+
+    async getBudgetStats(params = {}) {
+        const query = new URLSearchParams(params);
+        return this.request(`/stats/budgets?${query}`);
     }
 
     // Accounts

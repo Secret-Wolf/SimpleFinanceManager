@@ -139,6 +139,7 @@ def apply_rules_to_uncategorized(db: Session, user_id: int, rule_ids: Optional[L
     uncategorized = db.query(Transaction).filter(
         Transaction.category_id == None,
         Transaction.is_split_parent == False,
+        Transaction.is_transfer == False,
         Transaction.account_id.in_(account_ids),
     ).all()
 
@@ -165,6 +166,7 @@ def apply_rules_to_all(db: Session, user_id: int, rule_ids: Optional[List[int]] 
 
     transactions = db.query(Transaction).filter(
         Transaction.is_split_parent == False,
+        Transaction.is_transfer == False,
         Transaction.account_id.in_(account_ids),
     ).all()
 

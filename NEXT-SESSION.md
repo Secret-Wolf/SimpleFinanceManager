@@ -1,19 +1,31 @@
 # Übergabe / offene Punkte
 
 > Arbeitsdokument — kann gelöscht werden, sobald die Punkte erledigt sind.
-> Vollständiger Projektstand: siehe **CLAUDE.md** (Abschnitt „Project status (Stand 2026-06-12)").
+> Vollständiger Projektstand: siehe **CLAUDE.md** (Abschnitt „Project status (Stand 2026-06-13)").
 
-## Erledigt (Session 2026-06-12, committet)
+## Erledigt (Sessions 2026-06-12/13, committet)
 
-- **Tiefe Kategorien** (bis 5 Ebenen, z. B. Mobilität > Auto > Tanken) inkl. Statistik-Roll-up,
-  `include_subcategories` über alle Ebenen, Frontend-Dropdowns/Einrückung. Keine Migration nötig.
-- **Regeln:** grüner/roter Aktiv-Indikator in der Liste; **Regel-Sets** (`group_name`,
-  additive Migration 16) mit Auswahl-Modal bei „Regeln anwenden"
-  (`POST /api/rules/apply` + optional `{"rule_ids": [...]}`).
-- Tests: 32 grün, ruff/bandit sauber; Migration gegen Kopie einer Bestands-DB verifiziert.
+- **Tiefe Kategorien** (bis 5 Ebenen) inkl. Statistik-Roll-up und Dropdowns über alle Ebenen.
+- **Regeln:** Aktiv-Indikator + **Regel-Sets** (Migration 16) mit Auswahl-Modal beim Anwenden.
+- **Budgets fertiggestellt:** `GET /api/stats/budgets` + Budget-Karte (Fortschrittsbalken) auf der
+  Statistik-Seite; „Ist" = Teilbaum-Ausgaben des Monats.
+- **Umbuchungserkennung** (`is_transfer`, Migration 17): automatisch bei jedem Import (auch
+  rückwirkend), manueller Toggle, Filter, ⇄-Badge; Statistiken ignorieren Umbuchungen.
+- **Backup/Restore** (Admin): DB-Download + validierte Wiederherstellung mit Sicherheitskopie,
+  Karte auf der Benutzerverwaltungs-Seite.
+- Modernisierung (lifespan/ConfigDict), **FinTS-PDF aus Git-Tracking entfernt** (Historie!).
+- Tests: 41 grün, ruff/bandit sauber; Migrationen gegen Bestands-DB-Kopie verifiziert.
 
-**Achtung:** Diese Features sind noch **nicht** im zuletzt gepushten Image (digest `0007d9a6…`).
-Wenn sie auf den Server sollen: neu bauen & pushen (siehe CLAUDE.md „Deployment").
+**Achtung:** Nichts davon ist im zuletzt gepushten Image (digest `0007d9a6…`).
+Wenn es auf den Server soll: neu bauen & pushen (siehe CLAUDE.md „Deployment").
+
+## Nächste geplante Schritte (besprochen 2026-06-13)
+
+1. **Public-Repo-Vorbereitung** (siehe CLAUDE.md → „Publication prep"): frisches Repo ohne
+   Historie, Lizenz-Entscheidung (MIT vs. AGPL) **vor** dem ersten Public-Commit, Compose
+   generisch + ghcr-Release-Workflow, neue Screenshots mit Demo-Daten, README-Disclaimer.
+2. **PWA-Schritt** (Manifest + Service Worker) als günstige „Companion App"-Stufe 1.
+3. Optional: Scalable-Capital-FinTS testen (eigenes Depot/Tagesgeld des Nutzers).
 
 ## Offene Verifikation aus der FinTS-Session (user-seitig, falls noch nicht erledigt)
 

@@ -6,8 +6,73 @@ let customStatsStartDate = null;
 let customStatsEndDate = null;
 
 async function loadStatistics() {
-    const tasks = [loadCategoryStats(), loadTimeStats(), loadSharedSummary()];
+    const tasks = [loadCategoryStats(), loadTimeStats(), loadSharedSummary(), loadBudgetStats()];
     await Promise.all(tasks);
+}
+
+// Budgets: Budget vs. Ist des aktuellen Monats (Ausgaben inkl. Unterkategorien)
+async function loadBudgetStats() {
+    const section = document.getElementById('budget-section');
+    const container = document.getElementById('budget-content');
+    if (!section || !container) return;
+
+    try {
+        const stats = await api.getBudgetStats();
+
+        if (!stats.items || stats.items.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+
+        const months = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+                        'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+        document.getElementById('budget-section-title').textContent =
+            `Budgets – ${months[stats.month - 1]} ${stats.year}`;
+
+        const rows = stats.items.map(item => {
+            const percent = parseFloat(item.percent);
+            const barClass = percent >= 100 ? 'over' : (percent >= 80 ? 'warn' : 'ok');
+            const remaining = parseFloat(item.remaining);
+            const remainingText = remaining >= 0
+                ? `${formatCurrency(item.remaining)} übrig`
+                : `${formatCurrency(Math.abs(remaining))} überzogen`;
+
+            return `
+                <div class="budget-row">
+                    <div class="budget-row-header">
+                        <span class="category-badge" title="${escapeHtml(item.full_path || item.category_name)}">
+                            <span class="dot" style="background-color: ${safeColor(item.category_color)}"></span>
+                            ${escapeHtml(item.category_name)}
+                        </span>
+                        <span class="budget-row-values">
+                            ${formatCurrency(item.spent)} von ${formatCurrency(item.budget)}
+                            · <span class="budget-remaining ${remaining < 0 ? 'over' : ''}">${remainingText}</span>
+                        </span>
+                    </div>
+                    <div class="budget-bar-track">
+                        <div class="budget-bar ${barClass}" style="width: ${Math.min(percent, 100)}%"></div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        const totalPercent = parseFloat(stats.total_budget) > 0
+            ? (parseFloat(stats.total_spent) / parseFloat(stats.total_budget)) * 100 : 0;
+
+        container.innerHTML = rows + `
+            <div class="budget-row" style="border-top: 1px solid var(--border-color); padding-top: 12px; margin-bottom: 0;">
+                <div class="budget-row-header" style="font-weight: 600;">
+                    <span>Gesamt</span>
+                    <span class="budget-row-values">${formatCurrency(stats.total_spent)} von ${formatCurrency(stats.total_budget)} (${totalPercent.toFixed(0)}%)</span>
+                </div>
+            </div>
+        `;
+
+        section.style.display = 'block';
+
+    } catch (error) {
+        section.style.display = 'none';
+    }
 }
 
 function changeStatsPeriod() {

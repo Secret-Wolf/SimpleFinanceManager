@@ -11,7 +11,13 @@ from .. import schemas
 from ..auth import get_current_user
 from ..database import get_db
 from ..models import Account, Category, Transaction, User
-from ..services.statistics import get_dashboard_summary, get_shared_summary, get_stats_by_category, get_stats_over_time
+from ..services.statistics import (
+    get_budget_stats_for_month,
+    get_dashboard_summary,
+    get_shared_summary,
+    get_stats_by_category,
+    get_stats_over_time,
+)
 
 router = APIRouter(prefix="/api/stats", tags=["statistics"])
 
@@ -306,3 +312,27 @@ def get_last_salary_date(db: Session = Depends(get_db), current_user: User = Dep
     user_account_ids = _get_user_account_ids(db, current_user)
     salary_date = find_last_salary_date(db, user_account_ids)
     return {"date": salary_date.isoformat() if salary_date else None}
+
+
+@router.get("/budgets", response_model=schemas.BudgetStatsList)
+def get_budget_stats(
+    year: Optional[int] = Query(None, ge=2000, le=2100),
+    month: Optional[int] = Query(None, ge=1, le=12),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Budget vs. Ist je Kategorie für einen Monat (default: aktueller Monat).
+    'Ist' sind die Ausgaben der Kategorie inkl. aller Unterkategorien."""
+    user_account_ids = _get_user_account_ids(db, current_user)
+
+    today = date.today()
+    year = year or today.year
+    month = month or today.month
+    start = date(year, month, 1)
+    _, last_day = monthrange(year, month)
+    end = date(year, month, last_day)
+
+    return get_budget_stats_for_month(
+        db, current_user.id, year, month, start, end,
+        user_account_ids=user_account_ids
+    )

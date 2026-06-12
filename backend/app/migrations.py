@@ -303,4 +303,15 @@ def run_migrations():
                 conn.commit()
                 logger.info("Migration: group_name added to categorization_rules")
 
+        # Migration 17: Add is_transfer to transactions (Umbuchungen zwischen eigenen Konten)
+        if 'transactions' in inspector.get_table_names():
+            columns = [col['name'] for col in inspector.get_columns('transactions')]
+            if 'is_transfer' not in columns:
+                logger.info("Migration: Adding is_transfer to transactions")
+                conn.execute(text("""
+                    ALTER TABLE transactions ADD COLUMN is_transfer BOOLEAN DEFAULT 0
+                """))
+                conn.commit()
+                logger.info("Migration: is_transfer added to transactions")
+
         logger.info("All migrations completed")

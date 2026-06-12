@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import List, Optional
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 _BLOCKED_FINTS_HOSTNAMES = {"localhost", "ip6-localhost", "ip6-loopback"}
 
@@ -74,8 +74,7 @@ class UserResponse(BaseModel):
     is_admin: bool
     created_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserUpdate(BaseModel):
@@ -134,8 +133,7 @@ class HouseholdResponse(BaseModel):
     created_by: int
     created_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class HouseholdMemberResponse(BaseModel):
@@ -147,8 +145,7 @@ class HouseholdMemberResponse(BaseModel):
     role: str
     joined_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class HouseholdDetailResponse(HouseholdResponse):
@@ -169,8 +166,7 @@ class HouseholdInviteResponse(BaseModel):
     status: str
     created_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Category Schemas
@@ -200,8 +196,7 @@ class Category(CategoryBase):
     created_at: datetime
     transaction_count: Optional[int] = 0
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CategoryTree(Category):
@@ -227,8 +222,7 @@ class Account(AccountBase):
     is_active: bool
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Transaction Schemas
@@ -265,6 +259,7 @@ class TransactionUpdate(BaseModel):
     category_id: Optional[int] = None
     notes: Optional[str] = None
     is_shared: Optional[bool] = None
+    is_transfer: Optional[bool] = None
     shared_household_id: Optional[int] = None
     amount: Optional[Decimal] = None
     counterpart_name: Optional[str] = None
@@ -286,6 +281,7 @@ class Transaction(TransactionBase):
     bank_name: Optional[str] = None
     is_split_parent: bool = False
     is_shared: bool = False
+    is_transfer: bool = False
     shared_household_id: Optional[int] = None
     parent_transaction_id: Optional[int] = None
     original_category: Optional[str] = None
@@ -295,8 +291,7 @@ class Transaction(TransactionBase):
     updated_at: datetime
     category: Optional[Category] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TransactionList(BaseModel):
@@ -358,8 +353,7 @@ class Rule(RuleBase):
     created_at: datetime
     category: Optional[Category] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class RuleApplyRequest(BaseModel):
@@ -404,8 +398,7 @@ class BankConnectionResponse(BaseModel):
     last_sync: Optional[datetime] = None
     created_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SyncRequest(BaseModel):
@@ -451,8 +444,7 @@ class ImportResult(BaseModel):
     transactions_error: int
     status: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Statistics Schemas
@@ -494,6 +486,26 @@ class StatsOverTime(BaseModel):
     data: List[TimeSeriesPoint]
     total_income: Decimal
     total_expenses: Decimal
+
+
+class BudgetStats(BaseModel):
+    """Budget vs. Ist eines Monats für eine Kategorie (Ausgaben des Teilbaums)."""
+    category_id: int
+    category_name: str
+    category_color: Optional[str]
+    full_path: Optional[str]
+    budget: Decimal
+    spent: Decimal          # Ausgaben der Kategorie inkl. aller Unterkategorien (abs)
+    remaining: Decimal      # budget - spent (negativ = überzogen)
+    percent: Decimal        # spent / budget * 100
+
+
+class BudgetStatsList(BaseModel):
+    year: int
+    month: int
+    items: List[BudgetStats]
+    total_budget: Decimal
+    total_spent: Decimal
 
 
 # Shared Statistics

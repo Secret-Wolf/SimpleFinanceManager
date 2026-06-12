@@ -161,6 +161,7 @@
         bind('change', 'tx-amount-type', function () { applyTransactionFilters(); });
         bind('change', 'uncategorized-filter', function () { applyTransactionFilters(); });
         bind('change', 'shared-filter', function () { applyTransactionFilters(); });
+        bind('change', 'transfer-filter', function () { applyTransactionFilters(); });
         bind('change', 'stats-period', function () { changeStatsPeriod(); });
         bind('change', 'detail-shared', function () { onSharedCheckboxChange(); });
         bind('change', 'dark-mode-toggle', function () { toggleDarkMode(); });

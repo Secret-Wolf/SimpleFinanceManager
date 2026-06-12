@@ -50,7 +50,8 @@ def get_period_totals(
     query = db.query(Transaction).filter(
         Transaction.booking_date >= start_date,
         Transaction.booking_date <= end_date,
-        Transaction.is_split_parent == False
+        Transaction.is_split_parent == False,
+        Transaction.is_transfer == False
     )
     query = _apply_user_scope(query, user_account_ids)
 
@@ -103,7 +104,8 @@ def get_top_categories(
     ).filter(
         Transaction.booking_date >= start_date,
         Transaction.booking_date <= end_date,
-        Transaction.is_split_parent == False
+        Transaction.is_split_parent == False,
+        Transaction.is_transfer == False
     )
 
     if user_account_ids is not None:
@@ -135,10 +137,11 @@ def get_uncategorized_count(
     account_id: int = None,
     user_account_ids: List[int] = None
 ) -> int:
-    """Count transactions without category"""
+    """Count transactions without category (Umbuchungen brauchen keine)"""
     query = db.query(Transaction).filter(
         Transaction.category_id == None,
-        Transaction.is_split_parent == False
+        Transaction.is_split_parent == False,
+        Transaction.is_transfer == False
     )
     query = _apply_user_scope(query, user_account_ids)
 
@@ -177,7 +180,8 @@ def get_shared_expenses_current_month(db: Session, user_account_ids: List[int] =
         Transaction.amount < 0,
         Transaction.booking_date >= first_of_month,
         Transaction.booking_date <= today,
-        Transaction.is_split_parent == False
+        Transaction.is_split_parent == False,
+        Transaction.is_transfer == False
     )
     if user_account_ids is not None:
         query = query.filter(Transaction.account_id.in_(user_account_ids))
@@ -275,7 +279,8 @@ def get_stats_by_category(
         Transaction.category_id == Category.id,
         Transaction.booking_date >= start_date,
         Transaction.booking_date <= end_date,
-        Transaction.is_split_parent == False
+        Transaction.is_split_parent == False,
+        Transaction.is_transfer == False
     ]
     if user_account_ids is not None:
         join_conditions.append(Transaction.account_id.in_(user_account_ids))
@@ -358,7 +363,8 @@ def get_stats_by_category(
         Transaction.category_id == None,
         Transaction.booking_date >= start_date,
         Transaction.booking_date <= end_date,
-        Transaction.is_split_parent == False
+        Transaction.is_split_parent == False,
+        Transaction.is_transfer == False
     )
     if user_account_ids is not None:
         uncat_query = uncat_query.filter(Transaction.account_id.in_(user_account_ids))
@@ -408,7 +414,8 @@ def get_stats_over_time(
     query = db.query(Transaction).filter(
         Transaction.booking_date >= start_date,
         Transaction.booking_date <= end_date,
-        Transaction.is_split_parent == False
+        Transaction.is_split_parent == False,
+        Transaction.is_transfer == False
     )
     query = _apply_user_scope(query, user_account_ids)
 
@@ -458,6 +465,101 @@ def get_stats_over_time(
     )
 
 
+def get_budget_stats_for_month(
+    db: Session,
+    user_id: int,
+    year: int,
+    month: int,
+    start_date: date,
+    end_date: date,
+    user_account_ids: List[int] = None
+) -> schemas.BudgetStatsList:
+    """Budget vs. Ist je Kategorie mit Budget; 'Ist' = Ausgaben des Teilbaums.
+
+    total_budget/total_spent zählen nur Budgets, die nicht innerhalb einer
+    anderen budgetierten Kategorie liegen (sonst würde der Teilbaum doppelt zählen)."""
+
+    cats = db.query(
+        Category.id, Category.name, Category.color, Category.parent_id,
+        Category.full_path, Category.budget_monthly
+    ).filter(Category.user_id == user_id).all()
+
+    # Ausgaben je Kategorie im Monat (eigene Transaktionen, ohne Splits/Umbuchungen)
+    spent_query = db.query(
+        Transaction.category_id,
+        func.sum(Transaction.amount).label("total")
+    ).filter(
+        Transaction.amount < 0,
+        Transaction.booking_date >= start_date,
+        Transaction.booking_date <= end_date,
+        Transaction.is_split_parent == False,
+        Transaction.is_transfer == False,
+        Transaction.category_id != None
+    )
+    if user_account_ids is not None:
+        spent_query = spent_query.filter(Transaction.account_id.in_(user_account_ids))
+    own_spent = {r.category_id: abs(r.total or Decimal("0"))
+                 for r in spent_query.group_by(Transaction.category_id).all()}
+
+    children_of = {}
+    parent_of = {}
+    for c in cats:
+        children_of.setdefault(c.parent_id, []).append(c.id)
+        parent_of[c.id] = c.parent_id
+
+    def subtree_spent(cat_id) -> Decimal:
+        total = own_spent.get(cat_id, Decimal("0"))
+        for child_id in children_of.get(cat_id, []):
+            total += subtree_spent(child_id)
+        return total
+
+    budgeted = {c.id for c in cats if c.budget_monthly and c.budget_monthly > 0}
+
+    def has_budgeted_ancestor(cat_id) -> bool:
+        seen = {cat_id}
+        parent = parent_of.get(cat_id)
+        while parent is not None and parent not in seen:
+            if parent in budgeted:
+                return True
+            seen.add(parent)
+            parent = parent_of.get(parent)
+        return False
+
+    items = []
+    total_budget = Decimal("0")
+    total_spent = Decimal("0")
+
+    for c in cats:
+        if c.id not in budgeted:
+            continue
+        spent = subtree_spent(c.id)
+        budget = c.budget_monthly
+        percent = (spent / budget * 100).quantize(Decimal("0.1"))
+        items.append(schemas.BudgetStats(
+            category_id=c.id,
+            category_name=c.name,
+            category_color=c.color,
+            full_path=c.full_path,
+            budget=budget,
+            spent=spent,
+            remaining=budget - spent,
+            percent=percent
+        ))
+        if not has_budgeted_ancestor(c.id):
+            total_budget += budget
+            total_spent += spent
+
+    items.sort(key=lambda x: x.percent, reverse=True)
+
+    return schemas.BudgetStatsList(
+        year=year,
+        month=month,
+        items=items,
+        total_budget=total_budget,
+        total_spent=total_spent
+    )
+
+
 def get_shared_summary(
     db: Session,
     start_date: date,
@@ -471,7 +573,8 @@ def get_shared_summary(
         Transaction.amount < 0,
         Transaction.booking_date >= start_date,
         Transaction.booking_date <= end_date,
-        Transaction.is_split_parent == False
+        Transaction.is_split_parent == False,
+        Transaction.is_transfer == False
     )
     if household_account_ids is not None:
         query = query.filter(Transaction.account_id.in_(household_account_ids))
@@ -542,7 +645,8 @@ def get_shared_summary(
         Transaction.amount < 0,
         Transaction.booking_date >= start_date,
         Transaction.booking_date <= end_date,
-        Transaction.is_split_parent == False
+        Transaction.is_split_parent == False,
+        Transaction.is_transfer == False
     )
     if household_account_ids is not None:
         cat_query = cat_query.filter(Transaction.account_id.in_(household_account_ids))

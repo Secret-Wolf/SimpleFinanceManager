@@ -185,13 +185,24 @@
                         <h2>Transaktionen</h2>
                         <p>Alle Buchungen im Überblick</p>
                     </div>
-                    <button class="btn btn-primary" data-action="showManualEntryModal">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="5" x2="12" y2="19"></line>
-                            <line x1="5" y1="12" x2="19" y2="12"></line>
-                        </svg>
-                        Manueller Eintrag
-                    </button>
+                    <div class="flex gap-2">
+                        <button class="btn btn-secondary" data-action="detectTransfers" title="Buchungen zwischen eigenen Konten als Umbuchung markieren (zählen nicht als Einnahme/Ausgabe)">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="17 1 21 5 17 9"></polyline>
+                                <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+                                <polyline points="7 23 3 19 7 15"></polyline>
+                                <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+                            </svg>
+                            Umbuchungen erkennen
+                        </button>
+                        <button class="btn btn-primary" data-action="showManualEntryModal">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                            Manueller Eintrag
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Filter Bar -->
@@ -232,6 +243,11 @@
                     <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
                         <input type="checkbox" id="shared-filter">
                         <span>Nur gemeinsame</span>
+                    </label>
+
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <input type="checkbox" id="transfer-filter">
+                        <span>Nur Umbuchungen</span>
                     </label>
                 </div>
 
@@ -396,6 +412,17 @@
                         <div class="card-body">
                             <div id="time-chart-container" class="chart-container">
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Budgets (only visible if budgets are set) -->
+                <div id="budget-section" class="card mt-4" style="display: none;">
+                    <div class="card-header">
+                        <h3 id="budget-section-title">Budgets</h3>
+                    </div>
+                    <div class="card-body">
+                        <div id="budget-content">
                         </div>
                     </div>
                 </div>
@@ -624,6 +651,10 @@
                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 12px;">
                     <input type="checkbox" id="detail-shared">
                     <span>Gemeinsame Buchung</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 12px;">
+                    <input type="checkbox" id="detail-transfer">
+                    <span>Umbuchung zwischen eigenen Konten (keine Einnahme/Ausgabe)</span>
                 </label>
                 <div id="detail-household-row" style="margin-top: 10px; display: none;">
                     <label style="font-size: 0.875rem; color: var(--text-secondary); display: block; margin-bottom: 4px;">Haushalt</label>

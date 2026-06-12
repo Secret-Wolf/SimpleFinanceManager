@@ -29,6 +29,7 @@ from ..config import settings
 from ..models import BankConnection, Import, Transaction
 from .categorizer import apply_rules_to_uncategorized
 from .csv_parser import ensure_account_exists, generate_import_hash
+from .transfers import detect_transfers_for_user
 
 logger = logging.getLogger(__name__)
 
@@ -289,6 +290,8 @@ def _import_statements(db: Session, connection: BankConnection, statements, user
     db.commit()
 
     if new > 0:
+        # Umbuchungen zuerst markieren, dann kategorisieren (Regeln ueberspringen Umbuchungen)
+        detect_transfers_for_user(db, user_id)
         apply_rules_to_uncategorized(db, user_id)
 
     return {"imported": new, "duplicates": dup, "errors": err, "accounts": account_ibans}

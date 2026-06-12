@@ -11,6 +11,7 @@ from ..database import get_db
 from ..models import Import, User
 from ..services.categorizer import apply_rules_to_uncategorized
 from ..services.csv_parser import SUPPORTED_FORMATS, import_csv
+from ..services.transfers import detect_transfers_for_user
 
 router = APIRouter(prefix="/api/import", tags=["import"])
 
@@ -96,6 +97,11 @@ async def upload_csv(
         resource="import",
         detail=f"file={file.filename} format={bank_format} new={import_result.transactions_new} duplicates={import_result.transactions_duplicate}",
     )
+
+    # Umbuchungen zwischen eigenen Konten markieren (vor der Kategorisierung,
+    # damit Regeln sie nicht faelschlich kategorisieren)
+    if import_result.transactions_new > 0:
+        detect_transfers_for_user(db, current_user.id)
 
     # Auto-categorize new transactions (only this user's rules/transactions)
     if auto_categorize and import_result.transactions_new > 0:

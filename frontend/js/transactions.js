@@ -151,6 +151,7 @@ function renderTransactionRows(items) {
                         const badge = household ? household.name.substring(0, 2).toUpperCase() : 'G';
                         return `<span class="shared-badge" title="${escapeHtml(title)}">${escapeHtml(badge)}</span>`;
                     })() : ''}
+                    ${tx.is_transfer ? '<span class="transfer-badge" title="Umbuchung zwischen eigenen Konten (keine Einnahme/Ausgabe)">⇄</span>' : ''}
                     ${escapeHtml(truncate(tx.counterpart_name || tx.booking_type || '-', 35))}
                 </div>
                 <div style="font-size: 0.75rem; color: var(--text-muted)">${escapeHtml(truncate(tx.purpose || '', 50))}</div>
@@ -266,6 +267,7 @@ function applyTransactionFilters() {
     const amountType = document.getElementById('tx-amount-type').value;
     const uncategorized = document.getElementById('uncategorized-filter').checked;
     const sharedOnly = document.getElementById('shared-filter').checked;
+    const transfersOnly = document.getElementById('transfer-filter').checked;
 
     transactionFilters = {
         ...transactionFilters,
@@ -276,7 +278,8 @@ function applyTransactionFilters() {
         category_id: category,
         amount_type: amountType,
         uncategorized_only: uncategorized,
-        shared_only: sharedOnly
+        shared_only: sharedOnly,
+        transfers_only: transfersOnly
     };
 
     loadTransactions();
@@ -287,6 +290,18 @@ function setQuickPeriod(period) {
     document.getElementById('tx-start-date').value = dates.start;
     document.getElementById('tx-end-date').value = dates.end;
     applyTransactionFilters();
+}
+
+async function detectTransfers() {
+    try {
+        const result = await api.detectTransfers();
+        showToast(result.message, 'success');
+        if (result.detected_count > 0) {
+            loadTransactions();
+        }
+    } catch (error) {
+        showToast('Fehler: ' + error.message, 'error');
+    }
 }
 
 function updateBulkActions() {
@@ -435,6 +450,9 @@ async function showTransactionDetails(id) {
         const sharedCheckbox = document.getElementById('detail-shared');
         sharedCheckbox.checked = tx.is_shared || false;
 
+        // Transfer checkbox (Umbuchung)
+        document.getElementById('detail-transfer').checked = tx.is_transfer || false;
+
         // Populate household dropdown
         const householdSelect = document.getElementById('detail-household');
         householdSelect.innerHTML = '<option value="">Kein Haushalt zugewiesen</option>' +
@@ -474,6 +492,7 @@ async function saveTransactionDetails() {
     const amount = parseFloat(document.getElementById('detail-amount').value);
     const notes = notesInput.value;
     const isShared = document.getElementById('detail-shared').checked;
+    const isTransfer = document.getElementById('detail-transfer').checked;
     const householdVal = document.getElementById('detail-household').value;
     const sharedHouseholdId = isShared && householdVal ? parseInt(householdVal) : 0;
 
@@ -495,6 +514,7 @@ async function saveTransactionDetails() {
             amount,
             notes,
             is_shared: isShared,
+            is_transfer: isTransfer,
             shared_household_id: sharedHouseholdId
         });
         showToast('Gespeichert', 'success');

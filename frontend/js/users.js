@@ -67,9 +67,93 @@ async function loadUserManagement() {
                     </div>
                 </div>
             </div>
+
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h3>Datensicherung</h3>
+                </div>
+                <div class="card-body">
+                    <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 12px;">
+                        Das Backup enthält die komplette Datenbank (alle Benutzer, Transaktionen, Regeln,
+                        Bankverbindungen — keine PINs/Passwörter im Klartext). Beim Wiederherstellen werden
+                        alle aktuellen Daten ersetzt; die bisherige Datenbank bleibt als Sicherheitskopie
+                        im data-Verzeichnis liegen.
+                    </p>
+                    <div class="card-actions">
+                        <button class="btn btn-secondary" data-action="downloadBackup">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            Backup herunterladen
+                        </button>
+                        <label class="btn btn-secondary" for="restore-file-input" style="cursor: pointer;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                            Backup wiederherstellen…
+                        </label>
+                        <input type="file" id="restore-file-input" accept=".db,application/octet-stream"
+                               style="display: none;" data-onchange="handleRestoreFileSelected">
+                    </div>
+                </div>
+            </div>
         `;
     } catch (error) {
         container.innerHTML = `<div class="empty-state"><p>Fehler: ${escapeHtml(error.message)}</p></div>`;
+    }
+}
+
+// --- Datensicherung (admin) ---
+
+async function downloadBackup() {
+    try {
+        const response = await fetch('/api/backup/download');
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${response.status}`);
+        }
+        const blob = await response.blob();
+        const dispo = response.headers.get('Content-Disposition') || '';
+        const match = dispo.match(/filename="?([^";]+)"?/);
+
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = match ? match[1] : 'finanzmanager-backup.db';
+        link.click();
+        URL.revokeObjectURL(link.href);
+
+        showToast('Backup heruntergeladen', 'success');
+    } catch (error) {
+        showToast('Fehler: ' + error.message, 'error');
+    }
+}
+
+async function handleRestoreFileSelected() {
+    const input = document.getElementById('restore-file-input');
+    const file = input.files && input.files[0];
+    input.value = '';
+    if (!file) return;
+
+    const confirmed = confirm(
+        `Datenbank aus "${file.name}" wiederherstellen?\n\n` +
+        'ACHTUNG: Alle aktuellen Daten (alle Benutzer!) werden ersetzt. ' +
+        'Die bisherige Datenbank bleibt als Sicherheitskopie im data-Verzeichnis liegen.\n\n' +
+        'Danach ist eine erneute Anmeldung erforderlich.'
+    );
+    if (!confirmed) return;
+
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const result = await api.restoreBackup(formData);
+        showToast(result.message, 'success');
+        setTimeout(() => window.location.reload(), 1500);
+    } catch (error) {
+        showToast('Fehler: ' + error.message, 'error');
     }
 }
 

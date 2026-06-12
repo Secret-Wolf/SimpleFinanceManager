@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,10 +12,19 @@ from slowapi.util import get_remote_address
 from .config import settings
 from .database import init_db
 from .migrations import run_migrations
-from .routers import accounts, auth, banking, categories, households, imports, rules, stats, transactions
+from .routers import accounts, auth, backup, banking, categories, households, imports, rules, stats, transactions
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address, default_limits=[f"{settings.RATE_LIMIT_PER_MINUTE}/minute"])
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize database on startup"""
+    init_db()
+    run_migrations()
+    yield
+
 
 app = FastAPI(
     title="Finanzmanager",
@@ -22,6 +32,7 @@ app = FastAPI(
     version="2.0.0",
     docs_url="/api/docs" if settings.DEBUG else None,
     redoc_url="/api/redoc" if settings.DEBUG else None,
+    lifespan=lifespan,
 )
 
 # Rate limiting
@@ -85,6 +96,7 @@ app.include_router(stats.router)
 app.include_router(accounts.router)
 app.include_router(households.router)
 app.include_router(banking.router)
+app.include_router(backup.router)
 
 
 @app.get("/api/health")
@@ -113,10 +125,3 @@ if os.path.exists(frontend_path):
         if os.path.exists(file_path) and os.path.isfile(file_path):
             return FileResponse(file_path)
         return FileResponse(os.path.join(frontend_path, "index.html"))
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database on startup"""
-    init_db()
-    run_migrations()

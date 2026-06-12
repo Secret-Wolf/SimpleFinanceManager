@@ -114,6 +114,9 @@ class Transaction(Base):
     is_shared = Column(Boolean, default=False)
     shared_household_id = Column(Integer, ForeignKey("households.id"), nullable=True)
 
+    # Umbuchung zwischen eigenen Konten (keine Einnahme/Ausgabe in Statistiken)
+    is_transfer = Column(Boolean, default=False)
+
     # Benutzerdaten
     notes = Column(Text)
     tags = Column(String)  # Komma-separiert

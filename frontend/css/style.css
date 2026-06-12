@@ -1291,6 +1291,62 @@ tr.rule-row-inactive .rule-status {
     color: var(--text-secondary);
 }
 
+/* Umbuchungs-Badge (Transaktionsliste) */
+.transfer-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    background-color: var(--bg-tertiary);
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* Budgets (Statistik-Seite) */
+.budget-row {
+    margin-bottom: 14px;
+}
+
+.budget-row-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 0.875rem;
+}
+
+.budget-row-values {
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.budget-bar-track {
+    height: 10px;
+    background-color: var(--bg-tertiary);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.budget-bar {
+    height: 100%;
+    border-radius: 6px;
+    transition: width 0.3s ease;
+}
+
+.budget-bar.ok { background-color: var(--success-color); }
+.budget-bar.warn { background-color: var(--warning-color); }
+.budget-bar.over { background-color: var(--danger-color); }
+
+.budget-remaining.over {
+    color: var(--danger-color);
+    font-weight: 600;
+}
+
 /* Profiles Page */
 .profiles-grid {
     display: grid;
