@@ -1187,6 +1187,16 @@
             </div>
             <div class="modal-body">
                 <div class="form-group">
+                    <label>Bank suchen</label>
+                    <div class="bank-search-wrap">
+                        <input type="text" id="bank-conn-search" class="form-control" autocomplete="off"
+                               data-oninput="onBankSearchInput" data-debounce="250"
+                               placeholder="Name, Ort oder BLZ – z.B. Volksbank Dortmund">
+                        <div id="bank-search-results" class="bank-search-results hidden"></div>
+                    </div>
+                    <small style="color: var(--text-secondary);">Bank auswählen → BLZ und FinTS-URL werden automatisch gefüllt.</small>
+                </div>
+                <div class="form-group">
                     <label>Name</label>
                     <input type="text" id="bank-conn-name" class="form-control" placeholder="z.B. ING Giro" required>
                 </div>

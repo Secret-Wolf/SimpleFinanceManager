@@ -97,6 +97,9 @@ SECURITY-AUDIT.md
 FinTS-Produktregistrierung*.pdf
 
 # Offizielle DK-FinTS-Bankenliste — nur fuer registrierte Produkteigner,
-# darf NICHT oeffentlich verteilt werden (Verteiler-Bedingungen)
+# darf NICHT oeffentlich verteilt werden (Verteiler-Bedingungen).
+# Gilt fuer die Quell-CSV und die daraus erzeugte banks.json (kommt lokal
+# in den Docker-Build, aber nicht ins oeffentliche Repo).
 fints_institute*/
 fints_institute*
+backend/app/bankdir/banks.json

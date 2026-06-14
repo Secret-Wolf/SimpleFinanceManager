@@ -358,6 +358,10 @@ class ApiClient {
         return this.request('/banking/connections');
     }
 
+    async searchBanks(query) {
+        return this.request(`/banking/banks?q=${encodeURIComponent(query)}`);
+    }
+
     async createBankConnection(data) {
         return this.request('/banking/connections', {
             method: 'POST',

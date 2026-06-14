@@ -2,7 +2,7 @@
 
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
@@ -13,11 +13,21 @@ from ..auth import get_current_user
 from ..config import settings as app_settings
 from ..database import get_db
 from ..models import BankConnection, User
-from ..services import fints_service
+from ..services import bank_directory, fints_service
 from ..services.fints_service import BankingError
 
 router = APIRouter(prefix="/api/banking", tags=["banking"])
 limiter = Limiter(key_func=get_remote_address)
+
+
+@router.get("/banks", response_model=List[schemas.BankDirectoryEntry])
+def search_banks(
+    q: str = Query(..., min_length=2, description="Bankname, Ort oder BLZ"),
+    current_user: User = Depends(get_current_user),
+):
+    """Bank-Suche für die Verbindungsanlage: liefert BLZ + FinTS-URL zu einem
+    Namen/Ort/BLZ-Fragment. Leere Trefferliste, wenn keine Bankenliste vorliegt."""
+    return bank_directory.search_banks(q)
 
 
 def _get_owned_connection(connection_id: int, user: User, db: Session) -> BankConnection:

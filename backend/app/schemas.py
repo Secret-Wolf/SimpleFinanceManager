@@ -388,6 +388,15 @@ class BankConnectionCreate(BaseModel):
         return v
 
 
+class BankDirectoryEntry(BaseModel):
+    """Ein Treffer der Bank-Suche (BLZ -> FinTS-URL Komfort)."""
+    blz: str
+    name: str
+    ort: str
+    bic: Optional[str] = None
+    url: str
+
+
 class BankConnectionResponse(BaseModel):
     id: int
     name: str

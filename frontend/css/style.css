@@ -1004,6 +1004,55 @@ input[type="radio"] {
     padding: 20px;
 }
 
+/* Bank search (Verbindung anlegen) */
+.bank-search-wrap {
+    position: relative;
+}
+
+.bank-search-results {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 30;
+    max-height: 260px;
+    overflow-y: auto;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.12));
+}
+
+.bank-search-result {
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.bank-search-result:last-child {
+    border-bottom: none;
+}
+
+.bank-search-result:hover {
+    background: var(--bg-tertiary);
+}
+
+.bank-search-name {
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.bank-search-meta {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.bank-search-empty {
+    padding: 10px 12px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
 .bank-conn-card .conn-top {
     display: flex;
     align-items: center;

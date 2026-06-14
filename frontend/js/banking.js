@@ -3,6 +3,7 @@
 // Transient state for the current TAN flow (never persisted)
 let _tanFlow = { connectionId: null, jobId: null, decoupled: false };
 let _lastUrlSuggestion = '';
+let _bankSuggestions = [];  // last bank-search results (for index-based selection)
 
 // Suggest a FinTS endpoint based on the Bankleitzahl (editable by the user)
 function suggestFintsUrl(blz) {
@@ -66,11 +67,13 @@ async function loadBanking() {
 // --- Add connection ----------------------------------------------------------
 
 function showAddConnectionModal() {
+    document.getElementById('bank-conn-search').value = '';
     document.getElementById('bank-conn-name').value = '';
     document.getElementById('bank-conn-blz').value = '';
     document.getElementById('bank-conn-login').value = '';
     document.getElementById('bank-conn-url').value = '';
     document.getElementById('bank-conn-error').textContent = '';
+    hideBankSearchResults();
     _lastUrlSuggestion = '';
 
     // Attach BLZ -> URL suggestion once
@@ -91,6 +94,65 @@ function showAddConnectionModal() {
     }
 
     openModal('bank-connection-modal');
+}
+
+// --- Bank search (Name/Ort/BLZ -> BLZ + FinTS-URL) ---------------------------
+
+function hideBankSearchResults() {
+    const box = document.getElementById('bank-search-results');
+    box.innerHTML = '';
+    box.classList.add('hidden');
+    _bankSuggestions = [];
+}
+
+async function onBankSearchInput() {
+    const query = document.getElementById('bank-conn-search').value.trim();
+    const box = document.getElementById('bank-search-results');
+
+    if (query.length < 2) {
+        hideBankSearchResults();
+        return;
+    }
+
+    try {
+        const results = await api.searchBanks(query);
+        _bankSuggestions = results;
+
+        if (!results || results.length === 0) {
+            box.innerHTML = '<div class="bank-search-empty">Keine Bank gefunden – BLZ und FinTS-URL bitte manuell eingeben.</div>';
+            box.classList.remove('hidden');
+            return;
+        }
+
+        box.innerHTML = results.map((b, i) => `
+            <div class="bank-search-result" data-action="selectBankSuggestion" data-id="${i}">
+                <div class="bank-search-name">${escapeHtml(b.name)}</div>
+                <div class="bank-search-meta">${escapeHtml(b.ort)} · BLZ ${escapeHtml(b.blz)}</div>
+            </div>
+        `).join('');
+        box.classList.remove('hidden');
+    } catch (error) {
+        hideBankSearchResults();
+    }
+}
+
+function selectBankSuggestion(index) {
+    const bank = _bankSuggestions[index];
+    if (!bank) return;
+
+    document.getElementById('bank-conn-blz').value = bank.blz;
+    document.getElementById('bank-conn-url').value = bank.url;
+    _lastUrlSuggestion = bank.url;
+
+    // Pre-fill the connection name only if the user hasn't typed one yet
+    const nameInput = document.getElementById('bank-conn-name');
+    if (!nameInput.value.trim()) {
+        nameInput.value = bank.name;
+    }
+
+    document.getElementById('bank-conn-search').value = bank.name;
+    hideBankSearchResults();
+    document.getElementById('bank-conn-login').focus();
 }
 
 async function saveBankConnection() {
