@@ -41,13 +41,18 @@ Produkt nutzbar). Verteilung über Bankengruppen: **BdB** (Privat-/Direktbanken)
   Plaid/Yodlee (USA) – fundamentaler Mehraufwand und evtl. Aggregator-/Lizenzfragen. **Nicht im
   Scope.**
 
-**⚠️ Bankenlisten-Lizenzkonflikt (wichtig für die AGPL-Veröffentlichung):** Die DK-Bankenliste ist
-**nur für registrierte Produkteigner** und darf **nicht öffentlich weiterverteilt** werden – sie
-darf also **nicht** ins öffentliche AGPL-Repo. Optionen für die BLZ→URL-Funktion:
-(a) nur eine **kuratierte Teilmenge der großen Banken** mitliefern (deren FinTS-URLs stehen ohnehin
-öffentlich auf den Bank-Websites), (b) Liste zur Laufzeit aus geschützter Quelle nachladen,
-(c) Nutzer trägt FinTS-URL selbst ein / lädt seine eigene Liste. (Im Repo per `.gitignore`
-geschützt: `fints_institute*`.)
+**Bankenliste / BLZ→URL-Komfort (gelöst – gutes UX UND AGPL-konform):** Die geschützte DK-Volldatei
+(`fints_institute`, nur für registrierte Produkteigner, **nicht** ins öffentliche Repo, per
+`.gitignore` gesperrt) wird **gar nicht gebraucht**, weil die FinTS-Endpunkte hochgradig
+konzentriert sind: **nur 86 einzigartige URLs decken alle 3.545 Banken ab**; die Top 5 decken
+~3.100 (Deutsche Bank 1.452, Atruvia/Volksbanken 789 über 2 URLs, HypoVereinsbank 448, Commerzbank
+413), Sparkassen über ein Bundesland-Muster (`banking-XX.s-fints-pt-XX.de`, ~16 URLs). **Eine
+kuratierte Mini-Liste von ~30 öffentlichen URLs** (stehen auf den Bank-Websites/-Anleitungen) deckt
+>95 % der Privatkonten ab. Workflow: **IBAN → BLZ → Bank erkannt (freie Bundesbank-BLZ-Datei) → URL
+automatisch**; manuelle Eingabe nur als Fallback für Exoten. Technik: pro Bank reicht die EINE
+Einstiegs-URL – die weiteren Parameter (BPD) liefert die Bank nach dem ersten Connect selbst.
+**To-do:** kuratierte URL-Tabelle (~30 Einträge) aus öffentlichen Quellen anlegen + freie
+Bundesbank-BLZ-Datei (vierteljährliches Update) einbinden.
 
 ---
 
