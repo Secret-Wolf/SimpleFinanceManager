@@ -20,6 +20,37 @@ bewusst ausgeschlossen. Details siehe Abschnitt 7.
 
 ---
 
+## 0a. Markt – durch die Technik vorgegeben: **Deutschland** (belegt durch DK-Bankenliste)
+
+**FinTS/HBCI ist ein rein deutscher Standard** der Deutschen Kreditwirtschaft. Die offizielle
+DK-Bankenliste (`fints_institute`, 4.798 Einträge, lokal vorhanden – **nicht** im Repo, s. u.)
+bestätigt das mit Daten: **alle** Institute sind deutsch (3.548 mit BIC-Ländercode „DE", der Rest
+sind BIC-lose Filialen deutscher Häuser); **3.545** bieten eine **PIN/TAN-Zugangs-URL** (= für dieses
+Produkt nutzbar). Verteilung über Bankengruppen: **BdB** (Privat-/Direktbanken) 2.430, **BVR**
+(Volksbanken → Atruvia) 758, **DSGV** (Sparkassen → Finanz Informatik) 349.
+
+**Konsequenzen (vereinfachend):**
+- **Adressierbarer Markt = Personen mit deutschem Bankkonto.** Keine USA (OFX/Plaid), kein China
+  (eigene Systeme), kein EU-Ausland über denselben Weg (dort PSD2/XS2A „Berlin Group", **kein**
+  FinTS).
+- **Sprache: Deutsch genügt.** Englische UI wäre allenfalls „nice to have", aber **kein
+  Markthebel** – wer kein deutsches Konto hat, kann das Produkt technisch ohnehin nicht nutzen.
+- **Steuer bleibt überschaubar:** Hauptmarkt DE = deutsche USt; seltene EU-Käufe löst der Merchant
+  of Record. Keine internationale Steuer-/Lokalisierungs-Komplexität.
+- **International ginge nur als anderes Produkt:** zusätzliche Integration von PSD2/XS2A (EU) oder
+  Plaid/Yodlee (USA) – fundamentaler Mehraufwand und evtl. Aggregator-/Lizenzfragen. **Nicht im
+  Scope.**
+
+**⚠️ Bankenlisten-Lizenzkonflikt (wichtig für die AGPL-Veröffentlichung):** Die DK-Bankenliste ist
+**nur für registrierte Produkteigner** und darf **nicht öffentlich weiterverteilt** werden – sie
+darf also **nicht** ins öffentliche AGPL-Repo. Optionen für die BLZ→URL-Funktion:
+(a) nur eine **kuratierte Teilmenge der großen Banken** mitliefern (deren FinTS-URLs stehen ohnehin
+öffentlich auf den Bank-Websites), (b) Liste zur Laufzeit aus geschützter Quelle nachladen,
+(c) Nutzer trägt FinTS-URL selbst ein / lädt seine eigene Liste. (Im Repo per `.gitignore`
+geschützt: `fints_institute*`.)
+
+---
+
 ## 1. Produkt & Zielgruppe
 
 **Was es ist:** Selbst-gehosteter Finanzmanager für deutsche Privathaushalte. CSV- und
