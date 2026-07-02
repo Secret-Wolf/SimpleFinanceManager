@@ -1,0 +1,42 @@
+# Docker Compose für Betrieb hinter einem EIGENEN Reverse Proxy (z. B. vorhandener nginx).
+# TLS terminiert der nginx; die App ist von außen NICHT direkt erreichbar.
+# nginx-Beispielkonfiguration: docs/nginx-finanzmanager.conf.example
+# Nutzung: docker compose -f docker-compose.nginx.yml up -d
+
+services:
+  finanzmanager:
+    image: 192.168.178.30:5000/finanzmanager:latest
+    container_name: finanzmanager
+    restart: unless-stopped
+    ports:
+      # Nur auf localhost binden — Traffic kommt ausschließlich über den nginx (TLS).
+      # Läuft der nginx selbst als Container: stattdessen dieses ports-Mapping entfernen,
+      # ein gemeinsames Docker-Netz eintragen und im nginx "proxy_pass http://finanzmanager:8000".
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - TZ=Europe/Berlin
+      - SECRET_KEY=${SECRET_KEY}
+      - DEBUG=false
+      # Hinter TLS müssen die Auth-Cookies das Secure-Flag tragen
+      - COOKIE_SECURE=true
+      # Nur via 127.0.0.1 erreichbar → X-Forwarded-For des nginx vertrauen,
+      # damit Rate-Limits & Audit-Log die echte Client-IP sehen
+      - FORWARDED_ALLOW_IPS=*
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      # entrypoint.sh (chown auf das data-Volume) + gosu (Privilegien-Drop auf appuser)
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

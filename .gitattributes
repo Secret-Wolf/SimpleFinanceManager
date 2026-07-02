@@ -1,0 +1,2 @@
+# Shell-Skripte laufen im Linux-Container — CRLF würde /bin/sh brechen
+*.sh text eol=lf

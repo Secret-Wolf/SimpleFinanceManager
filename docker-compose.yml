@@ -12,8 +12,23 @@ services:
       - TZ=Europe/Berlin
       - SECRET_KEY=${SECRET_KEY}
       - DEBUG=false
+      # Hinter TLS (Traefik) müssen die Auth-Cookies das Secure-Flag tragen
+      - COOKIE_SECURE=true
+      # Nur über Traefik erreichbar (expose, kein ports) → X-Forwarded-For vertrauen,
+      # damit Rate-Limits & Audit-Log die echte Client-IP sehen statt der Proxy-IP
+      - FORWARDED_ALLOW_IPS=*
       # Für LAN-only Betrieb ohne Traefik: ALLOWED_ORIGINS leer lassen (same-origin)
       # Für externen Zugriff: ALLOWED_ORIGINS=https://finance.deinedomain.de
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      # entrypoint.sh (chown auf das data-Volume) + gosu (Privilegien-Drop auf appuser)
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
       interval: 30s
@@ -26,15 +41,24 @@ services:
       - "traefik.http.routers.finanzmanager.entrypoints=websecure"
       - "traefik.http.routers.finanzmanager.tls.certresolver=letsencrypt"
       - "traefik.http.services.finanzmanager.loadbalancer.server.port=8000"
+      # Body-Limit am Proxy (Restore braucht bis 200 MB) + grobe äußere Rate-Bremse
+      # (die feinen Limits pro Endpoint macht die App selbst via slowapi)
+      - "traefik.http.middlewares.fm-buffer.buffering.maxRequestBodyBytes=220000000"
+      - "traefik.http.middlewares.fm-ratelimit.ratelimit.average=50"
+      - "traefik.http.middlewares.fm-ratelimit.ratelimit.burst=100"
+      - "traefik.http.routers.finanzmanager.middlewares=fm-buffer,fm-ratelimit"
     networks:
       - web
 
   # Reverse Proxy mit automatischem HTTPS (Let's Encrypt)
   # Entferne diesen Block wenn du bereits einen Reverse Proxy hast
+  # (siehe docker-compose.nginx.yml für Betrieb hinter einem eigenen nginx)
   traefik:
     image: traefik:v3.0
     container_name: traefik
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
@@ -52,6 +76,8 @@ services:
       - "80:80"
       - "443:443"
     volumes:
+      # Hinweis: Wer es strikter mag, ersetzt den direkten Socket-Mount durch
+      # einen Socket-Proxy (z. B. tecnativa/docker-socket-proxy, nur GET erlaubt)
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./letsencrypt:/letsencrypt
     networks:

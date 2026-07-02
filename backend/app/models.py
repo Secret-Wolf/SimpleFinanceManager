@@ -14,6 +14,8 @@ class User(Base):
     display_name = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
+    # Wird bei Passwortwechsel erhöht → alle zuvor ausgestellten JWTs werden ungültig
+    token_version = Column(Integer, nullable=False, default=0, server_default="0")
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 

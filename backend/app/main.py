@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -48,6 +48,35 @@ if settings.ALLOWED_ORIGINS:
         allow_methods=["GET", "POST", "PATCH", "DELETE"],
         allow_headers=["Content-Type"],
     )
+
+
+# Request-Body-Limits (Defense-in-Depth zusätzlich zu Limits am Reverse Proxy):
+# JSON-Endpunkte brauchen nie große Bodies; die Upload-Endpunkte haben eigene,
+# höhere Limits (Chunk-weise geprüft). Chunked Requests ohne Content-Length
+# fängt der Proxy bzw. das Chunk-Limit im Endpoint.
+_BODY_LIMIT_DEFAULT = 2 * 1024 * 1024
+_BODY_LIMIT_IMPORT = (settings.MAX_UPLOAD_SIZE_MB + 1) * 1024 * 1024
+_BODY_LIMIT_RESTORE = 210 * 1024 * 1024  # backup.py erlaubt 200 MB + Multipart-Overhead
+
+
+@app.middleware("http")
+async def limit_request_body(request: Request, call_next):
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            length = int(content_length)
+        except ValueError:
+            return JSONResponse(status_code=400, content={"detail": "Ungültiger Content-Length-Header"})
+        path = request.url.path
+        if path.startswith("/api/backup/restore"):
+            limit = _BODY_LIMIT_RESTORE
+        elif path.startswith("/api/import"):
+            limit = _BODY_LIMIT_IMPORT
+        else:
+            limit = _BODY_LIMIT_DEFAULT
+        if length > limit:
+            return JSONResponse(status_code=413, content={"detail": "Anfrage zu groß"})
+    return await call_next(request)
 
 
 # Security headers middleware
@@ -101,8 +130,8 @@ app.include_router(backup.router)
 
 @app.get("/api/health")
 async def health_check():
-    """Health check endpoint - no auth required"""
-    return {"status": "ok", "version": "2.0.0"}
+    """Health check endpoint - no auth required (keine Versionsangabe nach außen)"""
+    return {"status": "ok"}
 
 
 # Static files for frontend

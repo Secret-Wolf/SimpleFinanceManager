@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from .. import schemas
 from ..audit import log_auth_event
 from ..auth import (
+    DUMMY_PASSWORD_HASH,
     clear_auth_cookies,
     get_current_admin,
     get_current_user,
@@ -62,7 +63,7 @@ def register(request: Request, data: schemas.UserRegister, response: Response, d
     db.refresh(user)
 
     # Auto-login after registration
-    set_auth_cookies(response, user.id)
+    set_auth_cookies(response, user)
 
     log_auth_event(
         "register",
@@ -121,7 +122,10 @@ def login(request: Request, data: schemas.UserLogin, response: Response, db: Ses
 
     client_ip = request.client.host if request.client else "unknown"
 
-    if not user or not verify_password(data.password, user.hashed_password):
+    # Bei unbekannter E-Mail gegen einen Dummy-Hash prüfen (Timing-Angleich)
+    password_ok = verify_password(data.password, user.hashed_password if user else DUMMY_PASSWORD_HASH)
+
+    if not user or not password_ok:
         log_auth_event(
             "login_failed",
             ip=client_ip,
@@ -148,7 +152,7 @@ def login(request: Request, data: schemas.UserLogin, response: Response, db: Ses
             detail="Konto deaktiviert",
         )
 
-    set_auth_cookies(response, user.id)
+    set_auth_cookies(response, user)
 
     log_auth_event("login", ip=client_ip, user_id=user.id, user_email=user.email)
 
@@ -173,17 +177,22 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
     if not token:
         raise HTTPException(status_code=401, detail="Kein Refresh-Token vorhanden")
 
-    user_id = validate_refresh_token(token)
-    if user_id is None:
+    payload = validate_refresh_token(token)
+    if payload is None:
         clear_auth_cookies(response)
         raise HTTPException(status_code=401, detail="Refresh-Token ungültig oder abgelaufen")
 
-    user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
+    user = db.query(User).filter(User.id == payload["sub"], User.is_active == True).first()
     if not user:
         clear_auth_cookies(response)
         raise HTTPException(status_code=401, detail="Benutzer nicht gefunden")
 
-    set_auth_cookies(response, user.id)
+    # Refresh-Tokens von vor einem Passwortwechsel sind ungültig
+    if payload.get("ver", 0) != (user.token_version or 0):
+        clear_auth_cookies(response)
+        raise HTTPException(status_code=401, detail="Sitzung abgelaufen, bitte neu einloggen")
+
+    set_auth_cookies(response, user)
 
     return {
         "message": "Token erneuert",
@@ -224,6 +233,7 @@ def update_me(
 def change_password(
     request: Request,
     data: schemas.PasswordChange,
+    response: Response,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -241,7 +251,12 @@ def change_password(
         raise HTTPException(status_code=400, detail="Aktuelles Passwort ist falsch")
 
     user.hashed_password = get_password_hash(data.new_password)
+    # Alle bestehenden Sessions (auch auf anderen Geräten) invalidieren
+    user.token_version = (user.token_version or 0) + 1
     db.commit()
+
+    # Die aktuelle Session bleibt eingeloggt: neue Cookies mit neuer Version
+    set_auth_cookies(response, user)
 
     log_auth_event("password_changed", ip=client_ip, user_id=user.id)
 
@@ -293,6 +308,8 @@ def update_user_by_admin(
 
     if data.new_password is not None:
         user.hashed_password = get_password_hash(data.new_password)
+        # Bestehende Sessions des Benutzers invalidieren
+        user.token_version = (user.token_version or 0) + 1
 
     db.commit()
     db.refresh(user)

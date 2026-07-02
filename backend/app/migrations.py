@@ -314,4 +314,15 @@ def run_migrations():
                 conn.commit()
                 logger.info("Migration: is_transfer added to transactions")
 
+        # Migration 18: Add token_version to users (Passwortwechsel invalidiert alte JWTs)
+        if 'users' in inspector.get_table_names():
+            columns = [col['name'] for col in inspector.get_columns('users')]
+            if 'token_version' not in columns:
+                logger.info("Migration: Adding token_version to users")
+                conn.execute(text("""
+                    ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0
+                """))
+                conn.commit()
+                logger.info("Migration: token_version added to users")
+
         logger.info("All migrations completed")

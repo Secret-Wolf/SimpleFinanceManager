@@ -25,6 +25,7 @@ from ..config import settings
 from ..database import engine, get_db
 from ..migrations import run_migrations
 from ..models import User
+from ..uploads import UPLOAD_CHUNK_SIZE
 
 logger = logging.getLogger(__name__)
 
@@ -75,20 +76,27 @@ async def restore_backup(
 ):
     """Datenbank aus einem Backup wiederherstellen. ERSETZT alle aktuellen Daten;
     die bisherige DB bleibt als .pre-restore-Kopie im data-Verzeichnis liegen."""
-    content = await file.read()
-
-    if len(content) > _MAX_RESTORE_SIZE_MB * 1024 * 1024:
-        raise HTTPException(status_code=400, detail=f"Datei zu groß (max. {_MAX_RESTORE_SIZE_MB} MB)")
-
-    if not content.startswith(b"SQLite format 3\x00"):
-        raise HTTPException(status_code=400, detail="Keine gültige SQLite-Datenbankdatei")
-
-    # Upload in eine Temp-Datei im selben Verzeichnis (für atomares os.replace)
+    # Upload in eine Temp-Datei im selben Verzeichnis streamen (für atomares
+    # os.replace) — Chunk-weise mit Größenlimit statt komplett in den RAM.
     db_dir = os.path.dirname(settings.DATABASE_PATH)
     fd, tmp_path = tempfile.mkstemp(suffix=".db", dir=db_dir)
     try:
+        max_bytes = _MAX_RESTORE_SIZE_MB * 1024 * 1024
+        total = 0
         with os.fdopen(fd, "wb") as f:
-            f.write(content)
+            while True:
+                chunk = await file.read(UPLOAD_CHUNK_SIZE)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > max_bytes:
+                    raise HTTPException(status_code=413, detail=f"Datei zu groß (max. {_MAX_RESTORE_SIZE_MB} MB)")
+                f.write(chunk)
+
+        with open(tmp_path, "rb") as f:
+            header = f.read(16)
+        if not header.startswith(b"SQLite format 3\x00"):
+            raise HTTPException(status_code=400, detail="Keine gültige SQLite-Datenbankdatei")
 
         # Validierung: Integrität + Kerntabellen vorhanden
         check = sqlite3.connect(tmp_path)

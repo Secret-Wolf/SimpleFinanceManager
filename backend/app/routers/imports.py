@@ -12,6 +12,7 @@ from ..models import Import, User
 from ..services.categorizer import apply_rules_to_uncategorized
 from ..services.csv_parser import SUPPORTED_FORMATS, import_csv
 from ..services.transfers import detect_transfers_for_user
+from ..uploads import read_upload_limited
 
 router = APIRouter(prefix="/api/import", tags=["import"])
 
@@ -51,15 +52,13 @@ async def upload_csv(
             detail="Nur CSV-Dateien werden unterstützt"
         )
 
-    # Read file content with size limit
+    # Read file content with size limit (chunked — kein voller RAM-Buffer bei Übergröße)
     try:
-        content = await file.read()
-        max_size = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
-        if len(content) > max_size:
-            raise HTTPException(
-                status_code=413,
-                detail=f"Datei zu groß. Maximum: {settings.MAX_UPLOAD_SIZE_MB} MB"
-            )
+        content = await read_upload_limited(
+            file,
+            settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024,
+            f"Datei zu groß. Maximum: {settings.MAX_UPLOAD_SIZE_MB} MB",
+        )
 
         # Try different encodings
         for encoding in ["utf-8-sig", "utf-8", "latin-1", "cp1252"]:

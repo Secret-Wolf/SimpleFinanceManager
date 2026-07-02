@@ -13,7 +13,7 @@ import pytest
 _tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
 _tmp.close()
 os.environ["DATABASE_PATH"] = _tmp.name
-os.environ["SECRET_KEY"] = "test-secret-key"
+os.environ["SECRET_KEY"] = "test-secret-key-0123456789abcdef0123456789abcdef"
 os.environ["DEBUG"] = "true"
 os.environ["COOKIE_SECURE"] = "false"
 # Effectively disable rate limiting so the suite isn't throttled

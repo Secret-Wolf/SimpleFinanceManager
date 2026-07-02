@@ -1,5 +1,6 @@
 # Docker Compose für LAN-only Betrieb (ohne HTTPS/Traefik)
 # Nutzung: docker compose -f docker-compose.local.yml up -d
+# NIEMALS diese Variante ins Internet exponieren (DEBUG=true, kein TLS, Port offen).
 
 services:
   finanzmanager:
@@ -14,6 +15,16 @@ services:
       - TZ=Europe/Berlin
       - SECRET_KEY=${SECRET_KEY}
       - DEBUG=true
+      # Kein FORWARDED_ALLOW_IPS: Port ist direkt erreichbar, Header wäre spoofbar
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
       interval: 30s

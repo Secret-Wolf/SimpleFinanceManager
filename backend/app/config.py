@@ -67,8 +67,21 @@ class Settings:
                     self.SECRET_KEY = secrets.token_urlsafe(64)
                     with open(secret_file, "w") as f:
                         f.write(self.SECRET_KEY)
+                    try:
+                        os.chmod(secret_file, 0o600)  # nur Besitzer (POSIX; unter Windows wirkungslos)
+                    except OSError:
+                        pass
             finally:
                 lf.close()
+
+        # HS256 braucht mindestens 32 Bytes Schlüsselmaterial (RFC 7518) — ein zu
+        # kurzer SECRET_KEY macht die Session-Tokens brute-force-bar.
+        if self.SECRET_KEY and len(self.SECRET_KEY) < 32:
+            print(
+                "WARNUNG: SECRET_KEY ist kürzer als 32 Zeichen. Bitte einen langen, "
+                "zufälligen Wert setzen (z. B. `openssl rand -base64 48`).",
+                file=sys.stderr,
+            )
 
 
 settings = Settings()

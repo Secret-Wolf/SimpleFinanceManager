@@ -46,3 +46,52 @@ def test_admin_can_create_user_but_normal_user_cannot(admin, make_api):
     r = member.post("/api/auth/register-user",
                     json={"email": "z@test.de", "password": "TestPasswort123", "display_name": "Z"})
     assert r.status_code == 403
+
+
+def test_password_change_invalidates_other_sessions(admin, make_api):
+    # Zweite Session desselben Users (eigener Cookie-Jar)
+    other = make_api()
+    other.login("admin@test.de")
+    assert other.get("/api/auth/me").status_code == 200
+
+    r = admin.post("/api/auth/change-password",
+                   json={"current_password": "TestPasswort123", "new_password": "NeuesPasswort999"})
+    assert r.status_code == 200, r.text
+
+    # Alte Session (alter token_version) ist raus, die wechselnde Session bleibt drin
+    assert other.get("/api/auth/me").status_code == 401
+    assert admin.get("/api/auth/me").status_code == 200
+
+    # Auch der alte Refresh-Token zieht nicht mehr
+    assert other.post("/api/auth/refresh").status_code == 401
+
+
+def test_admin_password_reset_invalidates_user_sessions(admin, make_api):
+    user = admin.create_user("member@test.de", name="Member")
+    member = make_api()
+    member.login("member@test.de")
+    assert member.get("/api/auth/me").status_code == 200
+
+    r = admin.patch(f"/api/auth/users/{user['id']}", json={"new_password": "NeuesPasswort999"})
+    assert r.status_code == 200, r.text
+
+    assert member.get("/api/auth/me").status_code == 401
+    member.login("member@test.de", password="NeuesPasswort999")
+    assert member.get("/api/auth/me").status_code == 200
+
+
+def test_unknown_email_login_rejected(api):
+    r = api.post("/api/auth/login",
+                 json={"email": "gibtsnicht@test.de", "password": "TestPasswort123"})
+    assert r.status_code == 401
+
+
+def test_oversized_json_body_rejected(api):
+    # Body-Limit-Middleware: JSON-Endpunkte akzeptieren keine Multi-MB-Bodies
+    r = api.post("/api/auth/login", content=b"x" * (3 * 1024 * 1024),
+                 headers={"Content-Type": "application/json"})
+    assert r.status_code == 413
+
+
+def test_health_leaks_no_version(api):
+    assert api.get("/api/health").json() == {"status": "ok"}

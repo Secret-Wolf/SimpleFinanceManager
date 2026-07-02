@@ -1,0 +1,50 @@
+# Finanzmanager hinter einem vorhandenen nginx (TLS terminiert hier).
+# Passend zu docker-compose.nginx.yml (App lauscht nur auf 127.0.0.1:8000).
+#
+# Einbinden z. B. als /etc/nginx/sites-available/finanzmanager + Symlink nach
+# sites-enabled, Domain und Zertifikatspfade anpassen, dann `nginx -t && systemctl reload nginx`.
+
+# Brute-Force-Bremse für den Login auf Proxy-Ebene (zusätzlich zum App-Rate-Limit).
+# Muss im http{}-Kontext stehen (sites-available-Dateien sind das bereits).
+limit_req_zone $binary_remote_addr zone=fm_login:10m rate=10r/m;
+
+server {
+    listen 443 ssl http2;
+    server_name finance.deinedomain.de;
+
+    # Zertifikate (z. B. certbot/Let's Encrypt)
+    ssl_certificate     /etc/letsencrypt/live/finance.deinedomain.de/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/finance.deinedomain.de/privkey.pem;
+
+    # CSV-Import erlaubt max. 10 MB; etwas Multipart-Overhead einplanen
+    client_max_body_size 11m;
+
+    # Diese Header braucht die App, damit Rate-Limits/Audit-Log die echte
+    # Client-IP sehen und HTTPS korrekt erkannt wird (FORWARDED_ALLOW_IPS=*).
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    location /api/auth/login {
+        limit_req zone=fm_login burst=5 nodelay;
+        proxy_pass http://127.0.0.1:8000;
+    }
+
+    # Nur der Admin-Restore braucht große Uploads
+    location /api/backup/restore {
+        client_max_body_size 210m;
+        proxy_pass http://127.0.0.1:8000;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+    }
+}
+
+# HTTP -> HTTPS Redirect
+server {
+    listen 80;
+    server_name finance.deinedomain.de;
+    return 301 https://$host$request_uri;
+}
