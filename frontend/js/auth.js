@@ -46,6 +46,11 @@ async function checkAuth() {
 }
 
 function showLogin() {
+    // Offene Modals schließen (z.B. Profil beim Logout oder bei Session-Ablauf),
+    // sonst bleiben sie über dem Login-Screen liegen und sperren den Body-Scroll
+    document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active'));
+    document.body.style.overflow = '';
+
     document.getElementById('login-screen').classList.remove('hidden');
     document.getElementById('setup-screen').classList.add('hidden');
     document.getElementById('app-container').classList.add('hidden');
@@ -165,7 +170,7 @@ async function handleLogout() {
         // Ignore
     }
     currentUser = null;
-    showLogin();
+    showLogin();  // schließt auch ein evtl. offenes Profil-Modal
 }
 
 // User Profile
