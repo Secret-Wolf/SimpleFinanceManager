@@ -306,6 +306,9 @@ async function exportTransactions() {
 // Dark Mode — default follows the OS; a manual toggle stores an explicit override.
 function applyTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
+    // PWA: Statusleisten-/Titelleistenfarbe mitziehen (muss --bg-primary entsprechen)
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', theme === 'dark' ? '#172033' : '#ffffff');
 }
 
 function systemPrefersDark() {

@@ -580,6 +580,43 @@ select.form-control {
     border: 1px solid var(--border-color);
 }
 
+/* Kontostand-Banner in der Transaktionsübersicht */
+.tx-balance-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    align-items: center;
+    margin-bottom: 16px;
+    padding: 14px 18px;
+    background-color: var(--bg-primary);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
+}
+
+.tx-balance-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.tx-balance-label {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.tx-balance-value {
+    font-size: 1.35rem;
+    font-weight: 700;
+}
+
+.tx-balance-value.positive {
+    color: var(--success-color);
+}
+
+.tx-balance-value.negative {
+    color: var(--danger-color);
+}
+
 .search-input {
     flex: 1;
     min-width: 200px;
@@ -760,6 +797,88 @@ select.form-control {
     position: relative;
 }
 
+/* Statistik-Charts (reines CSS, von statistics.js gerendert).
+   Müssen hier liegen: ein per JS injiziertes <style> blockt die CSP. */
+.simple-bar-chart {
+    padding: 10px 0;
+}
+
+.bar-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.bar-label {
+    width: 120px;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.bar-container {
+    flex: 1;
+    height: 24px;
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.bar {
+    height: 100%;
+    border-radius: var(--radius-sm);
+    transition: width 0.3s ease;
+}
+
+.bar-value {
+    width: 100px;
+    text-align: right;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.time-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    padding: 4px 0 0 0;
+}
+
+.time-bar-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.time-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    width: 100%;
+    height: 160px;
+}
+
+.time-bar {
+    flex: 1;
+    border-radius: 2px 2px 0 0;
+    min-height: 2px;
+}
+
+.time-bar.income {
+    background-color: var(--success-color);
+}
+
+.time-bar.expense {
+    background-color: var(--danger-color);
+}
+
+.time-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 8px;
+    white-space: nowrap;
+}
+
 /* Category List */
 .category-list {
     list-style: none;
@@ -907,34 +1026,6 @@ select.form-control {
 input[type="checkbox"],
 input[type="radio"] {
     accent-color: var(--primary-color);
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-    .sidebar {
-        transform: translateX(-100%);
-        transition: transform 0.3s ease;
-    }
-
-    .sidebar.open {
-        transform: translateX(0);
-    }
-
-    .main-content {
-        margin-left: 0;
-    }
-
-    .stats-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .filter-bar {
-        flex-direction: column;
-    }
-
-    .search-input {
-        min-width: 100%;
-    }
 }
 
 /* Utility Classes */
@@ -1496,6 +1587,7 @@ tr.rule-row-inactive .rule-status {
     align-items: center;
     justify-content: center;
     min-height: 100vh;
+    min-height: 100dvh; /* mobile Browser-UI (einklappende Adressleiste) korrekt einrechnen */
     padding: 20px;
     background:
         radial-gradient(1100px 520px at 50% -12%, var(--accent-soft), transparent 60%),
@@ -1621,6 +1713,39 @@ tr.rule-row-inactive .rule-status {
     transform: translateX(20px);
 }
 
+/* Feste Breiten für Filter-Controls (waren Inline-Styles; mobil überschrieben) */
+.filter-date {
+    width: 140px;
+}
+
+.filter-select {
+    width: 140px;
+}
+
+.filter-select-wide {
+    width: 180px;
+}
+
+.bulk-category-select {
+    width: 200px;
+}
+
+/* Statistik-Charts & Dashboard-Spalten: nebeneinander, mobil untereinander */
+.chart-card {
+    flex: 1;
+    min-width: 400px;
+}
+
+.dash-col-narrow {
+    flex: 1;
+    min-width: 300px;
+}
+
+.dash-col-wide {
+    flex: 2;
+    min-width: 400px;
+}
+
 /* ---------- Responsive ---------- */
 @media (max-width: 1024px) {
     .main-content {
@@ -1628,45 +1753,333 @@ tr.rule-row-inactive .rule-status {
     }
 }
 
+/* Mobile = App-Layout (PWA): kompakte Topbar, fixe Bottom-Navigation,
+   Bottom-Sheet-Modals, Transaktionsliste als Karten statt Tabelle. */
 @media (max-width: 768px) {
-    /* Sidebar collapses to a stacked top bar; content flows below it */
+    /* Kein horizontaler Overflow: sonst zoomt Chrome (Android) die ganze Seite
+       heraus und fixierte Elemente (Bottom-Nav, Modal-Footer) hängen außerhalb
+       des sichtbaren Bereichs. clip statt hidden: erzeugt keinen Scroll-Container. */
+    body {
+        overflow-x: clip;
+    }
+
     .app-container {
         flex-direction: column;
     }
 
+    /* Topbar: Logo + Kontoauswahl + Profil in einer Zeile */
     .sidebar {
-        position: static;
+        position: sticky;
+        top: 0;
         width: 100%;
         height: auto;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
         border-right: none;
         border-bottom: 1px solid var(--border-color);
+        padding-top: env(safe-area-inset-top);
     }
 
+    .sidebar-header {
+        padding: 12px 14px;
+        border-bottom: none;
+    }
+
+    .sidebar-header h1 {
+        font-size: 1.05rem;
+    }
+
+    .sidebar-header h1::before {
+        width: 22px;
+        height: 22px;
+        border-radius: 7px;
+    }
+
+    .account-selector {
+        flex: 1 1 120px;
+        min-width: 0;
+        padding: 8px 4px;
+        border-bottom: none;
+    }
+
+    .account-selector label {
+        display: none;
+    }
+
+    .sidebar-footer {
+        margin-top: 0;
+        margin-left: auto;
+        padding: 8px 10px;
+        border-top: none;
+    }
+
+    .sidebar-footer .user-name {
+        display: none; /* nur das Profil-Icon, Name steht im Profil-Modal */
+    }
+
+    .sidebar-footer .btn-icon {
+        padding: 10px; /* Touch-Ziel */
+    }
+
+    /* Bottom-Navigation (horizontal scrollbar, App-Stil) */
     .sidebar-nav {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 300;
         display: flex;
         flex-wrap: nowrap;
         overflow-x: auto;
-        gap: 4px;
-        padding: 8px 12px;
         -webkit-overflow-scrolling: touch;
+        background-color: var(--bg-primary);
+        border-top: 1px solid var(--border-color);
+        box-shadow: 0 -6px 20px -8px rgba(15, 23, 42, 0.18);
+        padding: 4px 6px calc(4px + env(safe-area-inset-bottom));
     }
 
     .nav-item {
-        flex: 0 0 auto;
+        position: relative;
+        flex: 1 0 68px;
         flex-direction: column;
-        gap: 5px;
-        padding: 8px 12px;
-        font-size: 0.7rem;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        padding: 7px 4px;
+        font-size: 0.66rem;
+        border-radius: var(--radius-sm);
         white-space: nowrap;
     }
 
-    .nav-badge {
-        margin-left: 6px;
+    .nav-item svg {
+        width: 21px;
+        height: 21px;
     }
 
+    .nav-badge {
+        position: absolute;
+        top: 1px;
+        right: 8px;
+        margin-left: 0;
+        font-size: 0.62rem;
+        padding: 1px 5px;
+    }
+
+    /* Inhalt: unten Platz für die Bottom-Nav lassen */
     .main-content {
         margin-left: 0;
         max-width: 100%;
-        padding: 18px 16px;
+        padding: 16px 14px calc(88px + env(safe-area-inset-bottom));
+    }
+
+    .page-header h2 {
+        font-size: 1.35rem;
+    }
+
+    .page-header.flex {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    /* Button-Gruppen im Seitenkopf dürfen umbrechen (nowrap-Buttons würden
+       sonst die Seite breiter als den Viewport machen) */
+    .page-header .flex {
+        flex-wrap: wrap;
+    }
+
+    /* 16px verhindert Auto-Zoom beim Fokussieren von Eingabefeldern */
+    .form-control {
+        font-size: 1rem;
+    }
+
+    .stats-grid {
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 10px;
+    }
+
+    .stat-card {
+        padding: 16px;
+    }
+
+    .stat-card .value {
+        font-size: 1.45rem;
+    }
+
+    .stat-card.balance-hero .value {
+        font-size: 1.9rem;
+    }
+
+    .chart-card,
+    .dash-col-narrow,
+    .dash-col-wide {
+        min-width: 100%;
+    }
+
+    .card-body {
+        padding: 16px;
+    }
+
+    .accounts-grid,
+    .profiles-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .dropzone {
+        padding: 28px 16px;
+    }
+
+    .subcategory {
+        padding-left: 24px;
+    }
+
+    /* Filterleiste kompakt: Suche voll, Zeitraum-Buttons als Reihe, Rest 2-spaltig */
+    .filter-bar {
+        padding: 12px;
+        gap: 8px;
+    }
+
+    .search-input {
+        flex: 1 1 100%;
+        min-width: 100%;
+    }
+
+    .filter-group {
+        display: grid;
+        /* minmax(0,1fr): nowrap-Buttons dürfen die Spalten nicht aufblähen */
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 6px;
+        width: 100%;
+    }
+
+    .filter-group .btn {
+        padding: 7px 6px;
+    }
+
+    .filter-bar > .filter-date,
+    .filter-bar > .filter-select {
+        width: calc(50% - 4px);
+    }
+
+    .filter-bar > .filter-select-wide {
+        width: 100%;
+    }
+
+    .filter-bar > label {
+        font-size: 0.85rem;
+    }
+
+    .bulk-category-select {
+        width: 100%;
+    }
+
+    /* Transaktionsliste: Karten-Layout statt 6-Spalten-Tabelle */
+    #page-transactions thead {
+        display: none;
+    }
+
+    #page-transactions table,
+    #page-transactions tbody {
+        display: block;
+        width: 100%;
+    }
+
+    #page-transactions tbody tr {
+        display: grid;
+        grid-template-columns: 28px 1fr auto;
+        grid-template-areas:
+            "check main amount"
+            "date  date btn"
+            "cat   cat  cat";
+        gap: 6px 10px;
+        align-items: center;
+        padding: 12px 4px;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    #page-transactions tbody tr:last-child {
+        border-bottom: none;
+    }
+
+    #page-transactions tbody td {
+        display: block;
+        padding: 0;
+        border-bottom: none;
+    }
+
+    #page-transactions tbody td:nth-child(1) { grid-area: check; }
+
+    #page-transactions tbody td:nth-child(2) {
+        grid-area: date;
+        font-size: 0.75rem;
+        color: var(--text-muted);
+    }
+
+    #page-transactions tbody td:nth-child(3) {
+        grid-area: main;
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    #page-transactions tbody td:nth-child(4) { grid-area: cat; }
+
+    #page-transactions tbody td:nth-child(4) select {
+        width: 100%;
+        padding: 8px 10px;
+    }
+
+    #page-transactions tbody td:nth-child(5) { grid-area: amount; }
+
+    #page-transactions tbody td:nth-child(6) {
+        grid-area: btn;
+        text-align: right;
+    }
+
+    /* Lade-/Leerzustand (einzelne td mit colspan) über die volle Breite */
+    #page-transactions tbody td[colspan] {
+        grid-area: auto;
+        grid-column: 1 / -1;
+    }
+
+    /* Modals als Bottom-Sheets */
+    .modal-overlay {
+        padding: 0;
+        align-items: flex-end;
+    }
+
+    .modal {
+        max-width: 100%;
+        max-height: calc(100dvh - 24px);
+        border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+        border-left: none;
+        border-right: none;
+        border-bottom: none;
+        transform: translateY(24px);
+    }
+
+    .modal-overlay.active .modal {
+        transform: translateY(0);
+    }
+
+    /* Nur der echte Footer (direktes Kind) klebt unten — nicht die
+       Zwischen-Footer im Body des Profil-Modals */
+    .modal > .modal-footer {
+        position: sticky;
+        bottom: 0;
+        background-color: var(--bg-primary);
+        flex-wrap: wrap;
+        padding-bottom: calc(16px + env(safe-area-inset-bottom));
+    }
+
+    /* Toasts über der Bottom-Nav, volle Breite */
+    .toast-container {
+        left: 12px;
+        right: 12px;
+        bottom: calc(78px + env(safe-area-inset-bottom));
+    }
+
+    .toast {
+        min-width: 0;
+        width: 100%;
     }
 }

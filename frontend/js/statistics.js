@@ -253,81 +253,8 @@ function renderCategoryChart(data) {
         </div>
     `;
 
-    // Add styles if not exists
-    if (!document.getElementById('chart-styles')) {
-        const style = document.createElement('style');
-        style.id = 'chart-styles';
-        style.textContent = `
-            .simple-bar-chart {
-                padding: 10px 0;
-            }
-            .bar-row {
-                display: flex;
-                align-items: center;
-                margin-bottom: 12px;
-            }
-            .bar-label {
-                width: 120px;
-                font-size: 0.875rem;
-                color: var(--text-secondary);
-            }
-            .bar-container {
-                flex: 1;
-                height: 24px;
-                background-color: var(--bg-secondary);
-                border-radius: var(--radius-sm);
-                overflow: hidden;
-            }
-            .bar {
-                height: 100%;
-                border-radius: var(--radius-sm);
-                transition: width 0.3s ease;
-            }
-            .bar-value {
-                width: 100px;
-                text-align: right;
-                font-size: 0.875rem;
-                font-weight: 500;
-            }
-            .time-chart {
-                display: flex;
-                align-items: flex-end;
-                gap: 4px;
-                padding: 4px 0 0 0;
-            }
-            .time-bar-group {
-                flex: 1;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-            }
-            .time-bars {
-                display: flex;
-                align-items: flex-end;
-                gap: 2px;
-                width: 100%;
-                height: 160px;
-            }
-            .time-bar {
-                flex: 1;
-                border-radius: 2px 2px 0 0;
-                min-height: 2px;
-            }
-            .time-bar.income {
-                background-color: var(--success-color);
-            }
-            .time-bar.expense {
-                background-color: var(--danger-color);
-            }
-            .time-label {
-                font-size: 0.75rem;
-                color: var(--text-muted);
-                margin-top: 8px;
-                white-space: nowrap;
-            }
-        `;
-        document.head.appendChild(style);
-    }
+    // Chart-Styles liegen in style.css (.simple-bar-chart / .time-chart) —
+    // ein injiziertes <style>-Element würde die CSP (style-src 'self') blocken.
 }
 
 function renderTimeChart(data) {

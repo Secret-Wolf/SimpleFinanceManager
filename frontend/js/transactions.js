@@ -28,6 +28,9 @@ async function loadTransactions() {
     hasMoreTransactions = true;
     isLoadingMore = false;
 
+    // Kontostand-Banner (folgt der Kontoauswahl); Fehler blockiert die Liste nicht
+    updateTransactionBalanceBar();
+
     container.innerHTML = '<tr><td colspan="6"><div class="loading-overlay"><div class="spinner"></div></div></td></tr>';
 
     try {
@@ -268,6 +271,7 @@ function applyTransactionFilters() {
     const uncategorized = document.getElementById('uncategorized-filter').checked;
     const sharedOnly = document.getElementById('shared-filter').checked;
     const transfersOnly = document.getElementById('transfer-filter').checked;
+    const [sortBy, sortOrder] = (document.getElementById('tx-sort').value || 'booking_date:desc').split(':');
 
     transactionFilters = {
         ...transactionFilters,
@@ -279,7 +283,9 @@ function applyTransactionFilters() {
         amount_type: amountType,
         uncategorized_only: uncategorized,
         shared_only: sharedOnly,
-        transfers_only: transfersOnly
+        transfers_only: transfersOnly,
+        sort_by: sortBy,
+        sort_order: sortOrder
     };
 
     loadTransactions();
@@ -290,6 +296,50 @@ function setQuickPeriod(period) {
     document.getElementById('tx-start-date').value = dates.start;
     document.getElementById('tx-end-date').value = dates.end;
     applyTransactionFilters();
+}
+
+// Kontostand-Banner oben in der Transaktionsübersicht.
+// Zeigt den Saldo des oben links gewählten Kontos (oder Summe über alle Konten).
+async function updateTransactionBalanceBar() {
+    const bar = document.getElementById('tx-balance-bar');
+    const labelEl = document.getElementById('tx-balance-label');
+    const valueEl = document.getElementById('tx-balance-value');
+    if (!bar) return;
+
+    try {
+        const data = await api.getAccountsSummary();
+        if (!data.accounts || data.accounts.length === 0) {
+            bar.classList.add('hidden');
+            return;
+        }
+
+        let balance;
+        let label;
+        if (selectedAccountId) {
+            const acc = data.accounts.find(a => a.id === selectedAccountId);
+            if (!acc) {
+                bar.classList.add('hidden');
+                return;
+            }
+            balance = acc.balance;
+            label = `Kontostand · ${acc.name}`;
+        } else {
+            balance = data.total_balance;
+            label = data.accounts.length > 1 ? 'Kontostand · Alle Konten' : 'Kontostand';
+        }
+
+        labelEl.textContent = label;
+        if (balance === null || balance === undefined) {
+            valueEl.textContent = 'Kein Saldo';
+            valueEl.className = 'tx-balance-value';
+        } else {
+            valueEl.textContent = formatCurrency(balance);
+            valueEl.className = `tx-balance-value ${parseFloat(balance) >= 0 ? 'positive' : 'negative'}`;
+        }
+        bar.classList.remove('hidden');
+    } catch (error) {
+        bar.classList.add('hidden');
+    }
 }
 
 async function detectTransfers() {

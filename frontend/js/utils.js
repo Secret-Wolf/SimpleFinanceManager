@@ -265,9 +265,12 @@ function getCategorySubtreeHeight(flatCats, id) {
 }
 
 // Calculate percentage change
+// API liefert Beträge als Strings ("0.00" ist truthy!) — daher erst parsen.
 function percentChange(current, previous) {
-    if (!previous || previous === 0) return null;
-    return ((current - previous) / Math.abs(previous)) * 100;
+    const prev = parseFloat(previous) || 0;
+    const curr = parseFloat(current) || 0;
+    if (prev === 0) return null;
+    return ((curr - prev) / Math.abs(prev)) * 100;
 }
 
 // Format percentage

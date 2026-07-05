@@ -2,6 +2,8 @@
 
 let activeHouseholdExpensesId = null;
 let householdExpensesPeriod = 'year';
+let householdExpensesStart = null;  // eigener Zeitraum (period === 'custom')
+let householdExpensesEnd = null;
 
 async function loadHouseholdManagement() {
     const container = document.getElementById('households-content');
@@ -261,6 +263,8 @@ function viewSharedExpenses(householdId, memberCount) {
 
     activeHouseholdExpensesId = householdId;
     householdExpensesPeriod = 'year';
+    householdExpensesStart = null;
+    householdExpensesEnd = null;
     loadSharedExpensesView(householdId, memberCount, householdName);
 }
 
@@ -273,6 +277,30 @@ function closeSharedExpensesView() {
 
 function changeHouseholdExpensesPeriod(period, householdId, memberCount, householdName) {
     householdExpensesPeriod = period;
+    // Beim Wechsel auf "Eigener Zeitraum" mit aktuellem Monat vorbelegen
+    if (period === 'custom' && (!householdExpensesStart || !householdExpensesEnd)) {
+        const today = new Date();
+        householdExpensesStart = formatDateInput(new Date(today.getFullYear(), today.getMonth(), 1));
+        householdExpensesEnd = formatDateInput(today);
+    }
+    loadSharedExpensesView(householdId, memberCount, householdName);
+}
+
+function applyHouseholdCustomPeriod(householdId, memberCount, householdName) {
+    const start = document.getElementById('household-custom-start').value;
+    const end = document.getElementById('household-custom-end').value;
+
+    if (!start || !end) {
+        showToast('Bitte Start- und Enddatum angeben', 'error');
+        return;
+    }
+    if (new Date(start) > new Date(end)) {
+        showToast('Startdatum muss vor Enddatum liegen', 'error');
+        return;
+    }
+
+    householdExpensesStart = start;
+    householdExpensesEnd = end;
     loadSharedExpensesView(householdId, memberCount, householdName);
 }
 
@@ -289,6 +317,10 @@ async function loadSharedExpensesView(householdId, memberCount, householdName) {
             period: householdExpensesPeriod,
             household_id: householdId
         };
+        if (householdExpensesPeriod === 'custom' && householdExpensesStart && householdExpensesEnd) {
+            params.start_date = householdExpensesStart;
+            params.end_date = householdExpensesEnd;
+        }
         const summary = await api.getSharedSummary(params);
 
         const periodLabels = {
@@ -296,29 +328,43 @@ async function loadSharedExpensesView(householdId, memberCount, householdName) {
             month: 'Dieser Monat',
             last_month: 'Letzter Monat',
             quarter: 'Dieses Quartal',
-            year: 'Dieses Jahr'
+            year: 'Dieses Jahr',
+            custom: 'Eigener Zeitraum'
         };
+
+        const isCustom = householdExpensesPeriod === 'custom';
+        const customDatesHtml = isCustom ? `
+            <div class="flex gap-2 items-center flex-wrap" style="margin-top: 8px;">
+                <input type="date" id="household-custom-start" class="form-control filter-date" value="${householdExpensesStart || ''}">
+                <span style="color: var(--text-secondary);">bis</span>
+                <input type="date" id="household-custom-end" class="form-control filter-date" value="${householdExpensesEnd || ''}">
+                <button class="btn btn-sm btn-primary" data-action="applyHouseholdCustomPeriod" data-id="${householdId}" data-value="${memberCount}" data-arg2="${escapeHtml(householdName)}">Anwenden</button>
+            </div>
+        ` : '';
 
         const perPerson = memberCount > 0 ? summary.total_shared_expenses / memberCount : summary.total_shared_expenses;
 
         container.innerHTML = `
             <div class="card" style="border-left: 4px solid var(--primary-color);">
-                <div class="card-header flex justify-between items-center">
+                <div class="card-header flex justify-between items-start">
                     <div>
                         <h3>Gemeinsame Ausgaben - ${escapeHtml(householdName)}</h3>
                     </div>
-                    <div class="flex gap-2 items-center">
-                        <select class="form-control" style="width: auto;" data-onchange="changeHouseholdExpensesPeriod" data-household-id="${householdId}" data-member-count="${memberCount}" data-household-name="${escapeHtml(householdName)}">
-                            ${Object.entries(periodLabels).map(([val, label]) =>
-                                `<option value="${val}" ${val === householdExpensesPeriod ? 'selected' : ''}>${label}</option>`
-                            ).join('')}
-                        </select>
-                        <button class="btn btn-sm btn-secondary" data-action="closeSharedExpensesView" title="Schliessen">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <line x1="18" y1="6" x2="6" y2="18"></line>
-                                <line x1="6" y1="6" x2="18" y2="18"></line>
-                            </svg>
-                        </button>
+                    <div class="flex" style="flex-direction: column; align-items: flex-end; gap: 8px;">
+                        <div class="flex gap-2 items-center">
+                            <select class="form-control" style="width: auto;" data-onchange="changeHouseholdExpensesPeriod" data-household-id="${householdId}" data-member-count="${memberCount}" data-household-name="${escapeHtml(householdName)}">
+                                ${Object.entries(periodLabels).map(([val, label]) =>
+                                    `<option value="${val}" ${val === householdExpensesPeriod ? 'selected' : ''}>${label}</option>`
+                                ).join('')}
+                            </select>
+                            <button class="btn btn-sm btn-secondary" data-action="closeSharedExpensesView" title="Schliessen">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                            </button>
+                        </div>
+                        ${customDatesHtml}
                     </div>
                 </div>
                 <div class="card-body">

@@ -18,6 +18,10 @@ function navigateTo(page) {
         item.classList.remove('active');
         if (item.dataset.page === page) {
             item.classList.add('active');
+            // Mobile: Bottom-Nav scrollt horizontal — aktives Item sichtbar halten
+            if (item.scrollIntoView) {
+                item.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            }
         }
     });
 
@@ -190,7 +194,7 @@ async function loadDashboard() {
             </div>
 
             <div class="flex gap-4" style="flex-wrap: wrap;">
-                <div class="card" style="flex: 1; min-width: 300px;">
+                <div class="card dash-col-narrow">
                     <div class="card-header">
                         <h3>Top Ausgaben</h3>
                     </div>
@@ -209,7 +213,7 @@ async function loadDashboard() {
                     </div>
                 </div>
 
-                <div class="card" style="flex: 2; min-width: 400px;">
+                <div class="card dash-col-wide">
                     <div class="card-header">
                         <h3>Letzte Transaktionen</h3>
                         <button class="btn btn-sm btn-secondary" data-action="navigateTo" data-value="transactions">Alle anzeigen</button>

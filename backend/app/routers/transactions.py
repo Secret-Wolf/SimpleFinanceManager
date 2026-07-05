@@ -9,7 +9,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from .. import schemas
@@ -39,7 +39,7 @@ def _csv_safe(value) -> str:
 def get_transactions(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=1000),
-    sort_by: str = Query("booking_date", pattern="^(booking_date|amount|counterpart_name)$"),
+    sort_by: str = Query("booking_date", pattern="^(booking_date|amount|amount_abs|counterpart_name)$"),
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
@@ -122,6 +122,9 @@ def get_transactions(
         order_col = Transaction.booking_date
     elif sort_by == "amount":
         order_col = Transaction.amount
+    elif sort_by == "amount_abs":
+        # Betrag der Höhe nach, unabhängig vom Vorzeichen (größte Einnahme/Ausgabe zuerst)
+        order_col = func.abs(Transaction.amount)
     elif sort_by == "counterpart_name":
         order_col = Transaction.counterpart_name
     else:
