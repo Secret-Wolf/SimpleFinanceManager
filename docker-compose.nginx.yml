@@ -21,9 +21,14 @@ services:
       - DEBUG=false
       # Hinter TLS müssen die Auth-Cookies das Secure-Flag tragen
       - COOKIE_SECURE=true
-      # Nur via 127.0.0.1 erreichbar → X-Forwarded-For des nginx vertrauen,
-      # damit Rate-Limits & Audit-Log die echte Client-IP sehen
-      - FORWARDED_ALLOW_IPS=*
+      # Echte Client-IP (Rate-Limit + Audit) aus X-Forwarded-For NUR vom eigenen
+      # Reverse Proxy übernehmen — hier die IP des Proxys eintragen:
+      #  - nginx auf DEMSELBEN Host (127.0.0.1-Bind oben) → 127.0.0.1
+      #  - Proxy/NPM auf ANDEREM Host → dessen LAN-IP (z. B. 192.168.178.5) UND oben
+      #    das ports-Mapping auf den LAN-Port ändern (z. B. "8000:8000").
+      # WICHTIG: exakt setzen, NICHT leer lassen (sonst alle Requests in einem Bucket)
+      # und NICHT den Proxy weglassen (sonst wäre X-Forwarded-For spoofbar).
+      - TRUSTED_PROXIES=127.0.0.1
     security_opt:
       - no-new-privileges:true
     cap_drop:

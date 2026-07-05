@@ -4,7 +4,6 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
 from .. import schemas
@@ -19,12 +18,13 @@ from ..auth import (
     validate_refresh_token,
     verify_password,
 )
+from ..client_ip import client_ip_key, get_client_ip
 from ..config import settings as app_settings
 from ..database import get_db
 from ..models import Account, CategorizationRule, Category, User
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=client_ip_key)
 
 
 @router.post("/register", response_model=schemas.UserResponse, status_code=201)
@@ -67,7 +67,7 @@ def register(request: Request, data: schemas.UserRegister, response: Response, d
 
     log_auth_event(
         "register",
-        ip=request.client.host if request.client else "unknown",
+        ip=get_client_ip(request),
         user_id=user.id,
         user_email=user.email,
         detail="first_user/admin" if is_first_user else "user",
@@ -120,7 +120,7 @@ def login(request: Request, data: schemas.UserLogin, response: Response, db: Ses
     """Login with email and password"""
     user = db.query(User).filter(User.email == data.email.strip().lower()).first()
 
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = get_client_ip(request)
 
     # Bei unbekannter E-Mail gegen einen Dummy-Hash prüfen (Timing-Angleich)
     password_ok = verify_password(data.password, user.hashed_password if user else DUMMY_PASSWORD_HASH)
@@ -166,7 +166,7 @@ def login(request: Request, data: schemas.UserLogin, response: Response, db: Ses
 def logout(request: Request, response: Response):
     """Logout - clear auth cookies"""
     clear_auth_cookies(response)
-    log_auth_event("logout", ip=request.client.host if request.client else "unknown")
+    log_auth_event("logout", ip=get_client_ip(request))
     return {"message": "Erfolgreich ausgeloggt"}
 
 
@@ -238,7 +238,7 @@ def change_password(
     user: User = Depends(get_current_user),
 ):
     """Change password for current user"""
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = get_client_ip(request)
 
     if not verify_password(data.current_password, user.hashed_password):
         log_auth_event(

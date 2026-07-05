@@ -15,7 +15,8 @@ services:
       - TZ=Europe/Berlin
       - SECRET_KEY=${SECRET_KEY}
       - DEBUG=true
-      # Kein FORWARDED_ALLOW_IPS: Port ist direkt erreichbar, Header wäre spoofbar
+      # Kein TRUSTED_PROXIES: Port ist direkt erreichbar → X-Forwarded-For ignorieren
+      # (Socket-Peer-IP zählt), sonst wäre die Client-IP spoofbar
     security_opt:
       - no-new-privileges:true
     cap_drop:

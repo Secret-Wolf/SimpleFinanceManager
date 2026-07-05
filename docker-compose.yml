@@ -14,9 +14,10 @@ services:
       - DEBUG=false
       # Hinter TLS (Traefik) müssen die Auth-Cookies das Secure-Flag tragen
       - COOKIE_SECURE=true
-      # Nur über Traefik erreichbar (expose, kein ports) → X-Forwarded-For vertrauen,
-      # damit Rate-Limits & Audit-Log die echte Client-IP sehen statt der Proxy-IP
-      - FORWARDED_ALLOW_IPS=*
+      # Echte Client-IP (Rate-Limit + Audit) aus X-Forwarded-For NUR vertrauen, wenn die
+      # Verbindung von Traefik kommt. Traefik läuft im selben Docker-Netz → dessen Subnetz
+      # angeben (Default-Bridge liegt in 172.16.0.0/12; bei eigenem Subnetz anpassen).
+      - TRUSTED_PROXIES=172.16.0.0/12
       # Für LAN-only Betrieb ohne Traefik: ALLOWED_ORIGINS leer lassen (same-origin)
       # Für externen Zugriff: ALLOWED_ORIGINS=https://finance.deinedomain.de
     security_opt:

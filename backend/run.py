@@ -31,4 +31,7 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=8000,
         reload=debug,
+        # Client-IP wird app-seitig ermittelt (app/client_ip.py, TRUSTED_PROXIES);
+        # uvicorns eigenes X-Forwarded-For-Handling MUSS dafür aus sein.
+        proxy_headers=False,
     )

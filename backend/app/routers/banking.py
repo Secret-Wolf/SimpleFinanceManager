@@ -4,12 +4,12 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
 from .. import schemas
 from ..audit import log_data_event
 from ..auth import get_current_user
+from ..client_ip import client_ip_key
 from ..config import settings as app_settings
 from ..database import get_db
 from ..models import BankConnection, User
@@ -17,7 +17,7 @@ from ..services import bank_directory, fints_service
 from ..services.fints_service import BankingError
 
 router = APIRouter(prefix="/api/banking", tags=["banking"])
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=client_ip_key)
 
 
 @router.get("/banks", response_model=List[schemas.BankDirectoryEntry])

@@ -23,6 +23,14 @@ class Settings:
     # CORS
     ALLOWED_ORIGINS: list = os.getenv("ALLOWED_ORIGINS", "").split(",") if os.getenv("ALLOWED_ORIGINS") else []
 
+    # Reverse-Proxy: vertrauenswuerdige Proxy-IPs/-Netze (kommagetrennt, IPs oder CIDRs).
+    # Nur wenn die DIREKTE Verbindung von einer dieser Adressen kommt, wird die echte
+    # Client-IP aus X-Forwarded-For uebernommen (rechtester nicht-vertrauter Eintrag) —
+    # sonst zaehlt die Socket-Peer-IP. Leer (Default) = keinem Proxy vertrauen (LAN/dev).
+    # Muss hinter einem Reverse Proxy gesetzt werden, sonst landen alle Requests in
+    # einem einzigen Rate-Limit-Bucket (Proxy-IP). Siehe app/client_ip.py.
+    TRUSTED_PROXIES: list = [p.strip() for p in os.getenv("TRUSTED_PROXIES", "").split(",") if p.strip()]
+
     # App
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
     COOKIE_SECURE: bool = os.getenv("COOKIE_SECURE", "false").lower() == "true"
