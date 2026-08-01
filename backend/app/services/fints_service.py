@@ -49,6 +49,9 @@ class BankingError(Exception):
 # --- Transient pending-TAN store (RAM only, never written to disk) -------------
 
 _PENDING_TTL = 300  # seconds
+# Wie oft darf die Bank innerhalb eines Abrufs eine weitere Freigabe verlangen
+# (Login-SCA, danach ggf. SCA für den Umsatzabruf) bevor wir abbrechen
+_MAX_COLLECT_ROUNDS = 3
 _pending: dict = {}
 _pending_lock = threading.Lock()
 
@@ -77,6 +80,7 @@ def _store_pending(*, user_id: int, connection_id: int, pin: str, client_data: b
             "decoupled": decoupled,
             "poll": poll or {},
             "polls_done": 0,
+            "collect_rounds": 0,
             "in_flight": False,
             "last_payload": None,
             "expires": time.time() + _PENDING_TTL,
@@ -373,6 +377,34 @@ def _restore_decoupled_flag(need_obj, decoupled: bool):
     return need_obj
 
 
+# Fortsetzungs-Methode ohne Client-Zustand: gibt die Bank-Antwort unveraendert zurueck
+_NEUTRAL_RESUME = "_continue_dialog_initialization"
+
+
+def _neutralize_resume_method(need_obj, client) -> bool:
+    """Verhindert den AttributeError '_touchdown_args' beim stateless TAN-Flow.
+
+    Loest ein Datenabruf (HKKAZ/HKCAZ) die SCA aus, merkt sich python-fints als
+    Fortsetzung `_continue_fetch_with_touchdowns`. Diese Methode braucht den
+    Touchdown-Zustand (Segment-Factory, Response-Processor, Segment-Typ), der nur
+    im RAM des damaligen Client-Objekts liegt und weder von deconstruct() noch von
+    pause_dialog() mitgespeichert wird — Closures sind nicht serialisierbar. Im
+    Folge-Request ist der Client neu, die Attribute fehlen, und die Verarbeitung
+    stirbt mit AttributeError, obwohl die Bank die Freigabe (0900) und die Umsaetze
+    (0020) bereits geliefert hat.
+
+    Loesung: Fortsetzung auf eine zustandslose Methode umbiegen, die die Antwort
+    nur durchreicht. Die Umsaetze holen wir danach im authentifizierten Dialog
+    ohnehin frisch ab (`_run_collect`) — dasselbe Muster, das nach jeder TAN greift.
+    """
+    if getattr(need_obj, "resume_method", None) != "_continue_fetch_with_touchdowns":
+        return False
+    if hasattr(client, "_touchdown_args"):
+        return False  # gleicher Client wie beim Absetzen — Zustand ist da
+    need_obj.resume_method = _NEUTRAL_RESUME
+    return True
+
+
 def _tan_payload(need: NeedTANResponse, token: str, poll: Optional[dict] = None,
                  poll_after: Optional[int] = None) -> dict:
     """Build the API payload describing a required TAN."""
@@ -549,46 +581,73 @@ def resume_sync(db: Session, connection: BankConnection, token: str, tan: Option
         # python-fints 5.0.0 verliert das decoupled-Flag beim Serialisieren → restaurieren,
         # sonst geht statt der Statusabfrage (Prozess 'S') eine leere TAN (Prozess '2') raus
         need_obj = _restore_decoupled_flag(NeedRetryResponse.from_data(pending["tan_data"]), decoupled)
+        neutralized = _neutralize_resume_method(need_obj, client)
         logger.info(
-            "FinTS resume: conn=%s decoupled=%s poll=%s/%s mechanism=%s hktan_v=%s",
+            "FinTS resume: conn=%s decoupled=%s poll=%s/%s mechanism=%s hktan_v=%s resume=%s%s",
             connection.id, decoupled, pending.get("polls_done", 0), poll.get("max_polls"),
             client.selected_security_function, _hktan_version(client),
+            getattr(need_obj, "resume_method", "?"), " (neutralisiert)" if neutralized else "",
         )
 
         still_need = None
         dialog_data = None
         collected = None
 
+        new_round = False
+
         with client.resume_dialog(pending["dialog_data"]):
             resp = client.send_tan(need_obj, tan or "")
 
             if isinstance(resp, NeedTANResponse) and getattr(resp, "decoupled", False):
+                # Freigabe noch ausstehend (3956) — weiter pollen
                 still_need = resp
                 dialog_data = client.pause_dialog()
             else:
-                # Authenticated now: collect everything fresh in this dialog.
+                # Freigabe erteilt: im jetzt authentifizierten Dialog frisch einsammeln
                 status, payload = _run_collect(client, pending["from_date"])
                 if status == "tan":
-                    raise BankingError(
-                        "Diese Bank verlangt eine weitere TAN pro Umsatzabruf – in v1 nicht unterstützt."
-                    )
-                collected = payload
+                    # Die Bank verlangt für den Datenabruf eine eigene Freigabe (bei
+                    # Atruvia möglich, wenn schon der Login eine brauchte) — als neue
+                    # Runde weiterführen statt den Vorgang abzubrechen.
+                    rounds = pending.get("collect_rounds", 0) + 1
+                    if rounds > _MAX_COLLECT_ROUNDS:
+                        raise BankingError(
+                            "Die Bank verlangt wiederholt neue Freigaben – Abruf abgebrochen. "
+                            "Bitte später erneut versuchen."
+                        )
+                    still_need = payload
+                    dialog_data = client.pause_dialog()
+                    new_round = True
+                else:
+                    collected = payload
 
         client_data = client.deconstruct(including_private=True)
         _save_system_data(db, connection, client_data)
 
         if still_need is not None:
             # Update the pending entry for the next poll request (reuse the same token)
-            payload = _tan_payload(still_need, token, poll=poll,
-                                   poll_after=poll.get("interval", 3))
+            if new_round:
+                # Neuer Auftrag → Decoupled-Status und Bank-Takt neu bestimmen
+                decoupled = bool(getattr(still_need, "decoupled", False))
+                poll = _decoupled_params(client) if decoupled else {}
+                polls_done = 0
+                wait = poll.get("first_wait", 3)
+            else:
+                polls_done = pending.get("polls_done", 0) + 1
+                wait = poll.get("interval", 3)
+
+            payload = _tan_payload(still_need, token, poll=poll, poll_after=wait)
             with _pending_lock:
                 if token in _pending:
                     _pending[token].update({
                         "client_data": client_data,
                         "dialog_data": dialog_data,
                         "tan_data": still_need.get_data(),
-                        "polls_done": pending.get("polls_done", 0) + 1,
-                        "not_before": time.time() + poll.get("interval", 3),
+                        "decoupled": decoupled,
+                        "poll": poll,
+                        "polls_done": polls_done,
+                        "collect_rounds": pending.get("collect_rounds", 0) + (1 if new_round else 0),
+                        "not_before": time.time() + wait,
                         "last_payload": dict(payload),
                         "in_flight": False,
                         "expires": time.time() + _PENDING_TTL,

@@ -9,8 +9,10 @@ bricht den Freigabevorgang mit 9010 ab.
 from types import SimpleNamespace
 
 from app.services.fints_service import (
+    _NEUTRAL_RESUME,
     _decoupled_params,
     _friendly_error,
+    _neutralize_resume_method,
     _restore_decoupled_flag,
     _tan_payload,
 )
@@ -128,6 +130,41 @@ def test_friendly_error_pin_message_never_blames_pin_during_approval():
     start_msg = _friendly_error(exc, codes, context="start")
     assert "PIN oder Zugangsdaten falsch" in start_msg
     assert "9955" in start_msg
+
+
+def test_neutralize_resume_method_prevents_touchdown_crash():
+    """Löst der Umsatzabruf die SCA aus, merkt sich python-fints
+    '_continue_fetch_with_touchdowns' als Fortsetzung. Diese Methode braucht
+    Client-RAM-Zustand (_touchdown_args & Closures), der den Request-Wechsel
+    nicht überlebt -> AttributeError, obwohl die Bank bereits freigegeben hat."""
+    fresh_client = SimpleNamespace()  # neuer Client: kein _touchdown_args
+    need = SimpleNamespace(resume_method="_continue_fetch_with_touchdowns")
+
+    assert _neutralize_resume_method(need, fresh_client) is True
+    assert need.resume_method == _NEUTRAL_RESUME
+
+    # Gleicher Client (Zustand vorhanden) -> unangetastet weiterlaufen lassen
+    same_client = SimpleNamespace(_touchdown_args=("HIKAZ",))
+    need2 = SimpleNamespace(resume_method="_continue_fetch_with_touchdowns")
+    assert _neutralize_resume_method(need2, same_client) is False
+    assert need2.resume_method == "_continue_fetch_with_touchdowns"
+
+    # Login-SCA ist ohnehin zustandslos -> nichts zu tun
+    need3 = SimpleNamespace(resume_method="_continue_dialog_initialization")
+    assert _neutralize_resume_method(need3, fresh_client) is False
+    assert need3.resume_method == "_continue_dialog_initialization"
+
+
+def test_neutral_resume_method_exists_and_passes_response_through():
+    """Die Ersatz-Fortsetzung muss es in python-fints geben und die Bank-Antwort
+    unverändert zurückgeben (wir sammeln danach selbst frisch ein)."""
+    from fints.client import FinTS3Client
+
+    method = getattr(FinTS3Client, _NEUTRAL_RESUME, None)
+    assert callable(method), f"{_NEUTRAL_RESUME} fehlt in python-fints"
+
+    sentinel = object()
+    assert method(None, "command_seg", sentinel) is sentinel
 
 
 def test_hktan_version_helper():
