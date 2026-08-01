@@ -208,6 +208,11 @@ function startBankSync(id) {
 }
 
 async function confirmBankSync() {
+    // Enter im PIN-Feld ruft diese Funktion direkt auf — läuft schon ein Abruf
+    // (Button disabled), nicht erneut starten
+    const btn = document.querySelector('#bank-pin-modal [data-action="confirmBankSync"]');
+    if (btn && btn.disabled) return;
+
     const connectionId = parseInt(document.getElementById('bank-sync-connection-id').value);
     const pin = document.getElementById('bank-sync-pin').value;
     const fromDate = document.getElementById('bank-sync-from').value || null;
@@ -219,7 +224,6 @@ async function confirmBankSync() {
         return;
     }
 
-    const btn = document.querySelector('#bank-pin-modal [data-action="confirmBankSync"]');
     btn.disabled = true;
     btn.textContent = 'Verbinde...';
 
@@ -305,6 +309,10 @@ function openTanModal(result, connectionId) {
 }
 
 async function confirmBankTan() {
+    // Doppel-Submit per Enter verhindern, während die TAN geprüft wird
+    const btn = document.getElementById('bank-tan-submit-btn');
+    if (btn && btn.disabled) return;
+
     const tan = document.getElementById('bank-tan-input').value.trim();
     const errorEl = document.getElementById('bank-tan-error');
     errorEl.textContent = '';
@@ -314,7 +322,6 @@ async function confirmBankTan() {
         return;
     }
 
-    const btn = document.getElementById('bank-tan-submit-btn');
     btn.disabled = true;
     btn.textContent = 'Prüfe...';
 

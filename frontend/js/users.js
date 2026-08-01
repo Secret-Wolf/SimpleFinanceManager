@@ -36,6 +36,7 @@ async function loadUserManagement() {
                                             <span style="color: ${u.is_active ? 'var(--success-color)' : 'var(--text-secondary)'}; font-weight: 500;">
                                                 ${u.is_active ? 'Aktiv' : 'Deaktiviert'}
                                             </span>
+                                            ${u.totp_enabled ? '<span title="2FA aktiv" style="margin-left: 6px;">🔐</span>' : ''}
                                         </td>
                                         <td>${formatDate(u.created_at)}</td>
                                         <td>
@@ -57,6 +58,12 @@ async function loadUserManagement() {
                                                         title="${u.is_active ? 'Deaktivieren' : 'Aktivieren'}">
                                                         ${u.is_active ? 'Deaktivieren' : 'Aktivieren'}
                                                     </button>
+                                                    ${u.totp_enabled ? `
+                                                        <button class="btn btn-sm btn-secondary" data-action="resetUserTotp" data-id="${u.id}"
+                                                            title="2FA zurücksetzen (z.B. bei verlorenem Gerät)">
+                                                            2FA-Reset
+                                                        </button>
+                                                    ` : ''}
                                                 ` : ''}
                                             </div>
                                         </td>
@@ -236,6 +243,19 @@ async function toggleUserAdmin(id, currentStatus) {
     try {
         await api.updateUser(id, { is_admin: !currentStatus });
         showToast(`Benutzer ${currentStatus ? 'ist kein Admin mehr' : 'ist jetzt Admin'}`, 'success');
+        _usersCache = [];
+        loadUserManagement();
+    } catch (error) {
+        showToast('Fehler: ' + error.message, 'error');
+    }
+}
+
+async function resetUserTotp(id) {
+    if (!confirm('2FA dieses Benutzers wirklich zurücksetzen?\n\nDer Benutzer kann sich danach wieder nur mit Passwort anmelden (alle Sessions werden beendet) und sollte 2FA neu einrichten.')) return;
+
+    try {
+        await api.updateUser(id, { reset_totp: true });
+        showToast('2FA zurückgesetzt', 'success');
         _usersCache = [];
         loadUserManagement();
     } catch (error) {

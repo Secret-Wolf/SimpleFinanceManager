@@ -10,6 +10,7 @@ let transactionFilters = {
     end_date: '',
     category_id: '',
     amount_type: '',
+    tag_id: '',
     uncategorized_only: false
 };
 
@@ -128,6 +129,7 @@ function buildTransactionParams() {
     if (!params.end_date) delete params.end_date;
     if (!params.category_id) delete params.category_id;
     if (!params.amount_type) delete params.amount_type;
+    if (!params.tag_id) delete params.tag_id;
 
     // Add account filter if selected
     if (selectedAccountId) {
@@ -158,6 +160,7 @@ function renderTransactionRows(items) {
                     ${escapeHtml(truncate(tx.counterpart_name || tx.booking_type || '-', 35))}
                 </div>
                 <div style="font-size: 0.75rem; color: var(--text-muted)">${escapeHtml(truncate(tx.purpose || '', 50))}</div>
+                ${renderRowTagBadges(tx)}
             </td>
             <td>
                 <select class="form-control category-select" data-id="${tx.id}" style="min-width: 150px;">
@@ -179,6 +182,22 @@ function renderTransactionRows(items) {
             </td>
         </tr>
     `).join('');
+}
+
+// Tag-Chips + Beleg-Klammer unter der Empfänger-Zeile (Namen nur als Text-Content,
+// Farben über safeColor — nie ungeprüft in Attribute interpolieren)
+function renderRowTagBadges(tx) {
+    const tags = tx.tags || [];
+    const attCount = (tx.attachments || []).length;
+    if (tags.length === 0 && attCount === 0) return '';
+
+    const chips = tags.map(t =>
+        `<span class="tag-chip tag-chip-sm" style="--tag-color: ${safeColor(t.color, '#10b981')}">${escapeHtml(t.name)}</span>`
+    ).join('');
+    const clip = attCount > 0
+        ? `<span class="attachment-badge" title="${attCount} Beleg${attCount > 1 ? 'e' : ''}">📎${attCount > 1 ? attCount : ''}</span>`
+        : '';
+    return `<div class="tx-row-tags">${chips}${clip}</div>`;
 }
 
 function setupRowHandlers(container) {
@@ -254,10 +273,13 @@ function setupInfiniteScroll() {
 
 function updateTransactionStatus(container, result) {
     const loaded = Math.min(transactionFilters.page * transactionFilters.per_page, totalTransactionCount);
+    // Summe aller Treffer anzeigen, sobald ein Tag-Filter aktiv ist (z.B. "Steuerrelevant")
+    const showSum = transactionFilters.tag_id && result.total_amount !== null && result.total_amount !== undefined;
     container.innerHTML = `
         <div class="text-center mt-4" style="color: var(--text-secondary); font-size: 0.875rem;">
             ${loaded} von ${totalTransactionCount} Transaktionen geladen
             ${hasMoreTransactions ? '' : ' (alle geladen)'}
+            ${showSum ? ` · Summe: <strong>${formatCurrency(result.total_amount)}</strong>` : ''}
         </div>
     `;
 }
@@ -268,6 +290,7 @@ function applyTransactionFilters() {
     const endDate = document.getElementById('tx-end-date').value;
     const category = document.getElementById('tx-category-filter').value;
     const amountType = document.getElementById('tx-amount-type').value;
+    const tagId = document.getElementById('tx-tag-filter') ? document.getElementById('tx-tag-filter').value : '';
     const uncategorized = document.getElementById('uncategorized-filter').checked;
     const sharedOnly = document.getElementById('shared-filter').checked;
     const transfersOnly = document.getElementById('transfer-filter').checked;
@@ -281,6 +304,7 @@ function applyTransactionFilters() {
         end_date: endDate,
         category_id: category,
         amount_type: amountType,
+        tag_id: tagId,
         uncategorized_only: uncategorized,
         shared_only: sharedOnly,
         transfers_only: transfersOnly,
@@ -496,6 +520,15 @@ async function showTransactionDetails(id) {
         notesInput.value = tx.notes || '';
         notesInput.dataset.id = tx.id;
 
+        // Tags (Änderungen werden erst mit "Speichern" übernommen)
+        detailTags = (tx.tags || []).slice();
+        document.getElementById('detail-tag-input').value = '';
+        renderDetailTags();
+
+        // Belege (Upload/Löschen wirken sofort)
+        detailAttachments = (tx.attachments || []).slice();
+        renderDetailAttachments();
+
         // Shared checkbox + household picker
         const sharedCheckbox = document.getElementById('detail-shared');
         sharedCheckbox.checked = tx.is_shared || false;
@@ -565,7 +598,8 @@ async function saveTransactionDetails() {
             notes,
             is_shared: isShared,
             is_transfer: isTransfer,
-            shared_household_id: sharedHouseholdId
+            shared_household_id: sharedHouseholdId,
+            tag_ids: detailTags.map(t => t.id)
         });
         showToast('Gespeichert', 'success');
         closeModal('transaction-detail-modal');
@@ -732,6 +766,89 @@ function showManualEntryModal() {
 function onSharedCheckboxChange() {
     const checked = document.getElementById('detail-shared').checked;
     document.getElementById('detail-household-row').style.display = checked ? '' : 'none';
+}
+
+// --- Belege (Attachments) im Detail-Modal ------------------------------------
+
+let detailAttachments = [];
+
+function formatFileSize(bytes) {
+    if (bytes === null || bytes === undefined) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function renderDetailAttachments() {
+    const box = document.getElementById('detail-attachments-list');
+    if (!box) return;
+    box.innerHTML = '';
+
+    if (detailAttachments.length === 0) {
+        const empty = document.createElement('span');
+        empty.className = 'tag-chips-empty';
+        empty.textContent = 'Keine Belege';
+        box.appendChild(empty);
+        return;
+    }
+
+    detailAttachments.forEach(a => {
+        const row = document.createElement('div');
+        row.className = 'attachment-item';
+
+        const link = document.createElement('a');
+        link.className = 'attachment-link';
+        link.href = `/api/attachments/${a.id}`;
+        link.target = '_blank';
+        link.rel = 'noopener';
+        link.title = 'Beleg öffnen';
+        link.textContent = `${a.content_type === 'application/pdf' ? '📄' : '🖼️'} ${a.filename}`;
+        row.appendChild(link);
+
+        const size = document.createElement('span');
+        size.className = 'attachment-size';
+        size.textContent = formatFileSize(a.size_bytes);
+        row.appendChild(size);
+
+        const del = document.createElement('button');
+        del.className = 'tag-chip-remove attachment-delete';
+        del.title = 'Beleg löschen';
+        del.textContent = '×';
+        del.dataset.action = 'deleteAttachmentConfirm';
+        del.dataset.id = String(a.id);
+        row.appendChild(del);
+
+        box.appendChild(row);
+    });
+}
+
+async function handleAttachmentSelected() {
+    const input = document.getElementById('detail-attachment-input');
+    const file = input.files && input.files[0];
+    input.value = '';
+    if (!file || !currentTransactionId) return;
+
+    try {
+        const attachment = await api.uploadAttachment(currentTransactionId, file);
+        detailAttachments.push(attachment);
+        renderDetailAttachments();
+        showToast('Beleg hochgeladen', 'success');
+    } catch (error) {
+        showToast('Fehler: ' + error.message, 'error');
+    }
+}
+
+async function deleteAttachmentConfirm(attachmentId) {
+    if (!confirm('Beleg wirklich löschen?')) return;
+
+    try {
+        await api.deleteAttachment(attachmentId);
+        detailAttachments = detailAttachments.filter(a => a.id !== attachmentId);
+        renderDetailAttachments();
+        showToast('Beleg gelöscht', 'success');
+    } catch (error) {
+        showToast('Fehler: ' + error.message, 'error');
+    }
 }
 
 async function deleteCurrentTransaction() {

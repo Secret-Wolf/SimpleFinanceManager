@@ -1,4 +1,16 @@
-from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import (
+    Boolean,
+    Column,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Table,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -16,6 +28,12 @@ class User(Base):
     is_admin = Column(Boolean, default=False)
     # Wird bei Passwortwechsel erhöht → alle zuvor ausgestellten JWTs werden ungültig
     token_version = Column(Integer, nullable=False, default=0, server_default="0")
+    # TOTP-Zwei-Faktor (opt-in): Secret + Recovery-Codes (JSON-Liste von SHA256-Hashes).
+    # totp_last_counter verhindert Replay eines bereits benutzten Codes im selben Zeitfenster.
+    totp_secret = Column(String, nullable=True)
+    totp_enabled = Column(Boolean, nullable=False, default=False, server_default="0")
+    totp_recovery_codes = Column(Text, nullable=True)
+    totp_last_counter = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
@@ -76,6 +94,30 @@ class Category(Base):
     owner = relationship("User", back_populates="categories")
 
 
+# M2M: Transaktion <-> Tag (z.B. "Steuerrelevant"); PK verhindert Doppelzuweisung
+transaction_tags = Table(
+    "transaction_tags",
+    Base.metadata,
+    Column("transaction_id", Integer, ForeignKey("transactions.id"), primary_key=True),
+    Column("tag_id", Integer, ForeignKey("tags.id"), primary_key=True),
+)
+
+
+class Tag(Base):
+    """Frei definierbare Schlagworte für Transaktionen (pro Benutzer, z.B. 'Steuerrelevant')."""
+    __tablename__ = "tags"
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_tags_user_name"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    name = Column(String(50), nullable=False)
+    color = Column(String(20), nullable=True)
+    created_at = Column(DateTime, default=func.now())
+
+    owner = relationship("User")
+    transactions = relationship("Transaction", secondary=transaction_tags, back_populates="tags")
+
+
 class Transaction(Base):
     __tablename__ = "transactions"
 
@@ -121,7 +163,6 @@ class Transaction(Base):
 
     # Benutzerdaten
     notes = Column(Text)
-    tags = Column(String)  # Komma-separiert
 
     # Metadaten
     created_at = Column(DateTime, default=func.now())
@@ -138,6 +179,26 @@ class Transaction(Base):
     parent_transaction = relationship("Transaction", remote_side=[id], back_populates="split_children")
     split_children = relationship("Transaction", back_populates="parent_transaction")
     shared_household = relationship("Household", foreign_keys=[shared_household_id])
+    tags = relationship("Tag", secondary=transaction_tags, back_populates="transactions")
+    attachments = relationship("Attachment", back_populates="transaction")
+
+
+class Attachment(Base):
+    """Beleg (PDF/PNG/JPG) zu einer Transaktion. Die Datei liegt unter data/attachments/,
+    der Dateiname auf der Platte ist eine zufällige UUID (stored_name) — nie der Original-Name."""
+    __tablename__ = "attachments"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    transaction_id = Column(Integer, ForeignKey("transactions.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    filename = Column(String(255), nullable=False)       # Original-Dateiname (nur Anzeige)
+    content_type = Column(String(100), nullable=False)   # application/pdf, image/png, image/jpeg
+    size_bytes = Column(Integer, nullable=False)
+    stored_name = Column(String(100), nullable=False, unique=True)
+    created_at = Column(DateTime, default=func.now())
+
+    transaction = relationship("Transaction", back_populates="attachments")
+    owner = relationship("User")
 
 
 class CategorizationRule(Base):

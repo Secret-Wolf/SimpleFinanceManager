@@ -10,3 +10,5 @@ PyJWT==2.13.0
 bcrypt==5.0.0
 slowapi==0.1.9
 fints==5.0.0
+pyotp==2.9.0
+qrcode==8.2

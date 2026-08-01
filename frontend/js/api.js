@@ -112,6 +112,13 @@ class ApiClient {
         });
     }
 
+    async bulkTagTransactions(transactionIds, tagId, remove = false) {
+        return this.request('/transactions/bulk-tag', {
+            method: 'POST',
+            body: { transaction_ids: transactionIds, tag_id: tagId, remove }
+        });
+    }
+
     async createManualTransaction(data) {
         return this.request('/transactions/manual', {
             method: 'POST',
@@ -286,6 +293,79 @@ class ApiClient {
         if (data.is_active !== undefined) params.append('is_active', data.is_active);
         return this.request(`/accounts/${id}?${params}`, {
             method: 'PATCH'
+        });
+    }
+
+    async deleteAccount(id) {
+        return this.request(`/accounts/${id}`, {
+            method: 'DELETE'
+        });
+    }
+
+    // Tags
+    async getTags() {
+        return this.request('/tags');
+    }
+
+    async createTag(data) {
+        return this.request('/tags', {
+            method: 'POST',
+            body: data
+        });
+    }
+
+    async updateTag(id, data) {
+        return this.request(`/tags/${id}`, {
+            method: 'PATCH',
+            body: data
+        });
+    }
+
+    async deleteTag(id) {
+        return this.request(`/tags/${id}`, {
+            method: 'DELETE'
+        });
+    }
+
+    // Attachments (Belege)
+    async uploadAttachment(transactionId, file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        return this.request(`/transactions/${transactionId}/attachments`, {
+            method: 'POST',
+            body: formData
+        });
+    }
+
+    async deleteAttachment(id) {
+        return this.request(`/attachments/${id}`, {
+            method: 'DELETE'
+        });
+    }
+
+    // TOTP (Zwei-Faktor)
+    async getTotpStatus() {
+        return this.request('/auth/totp/status');
+    }
+
+    async setupTotp(password) {
+        return this.request('/auth/totp/setup', {
+            method: 'POST',
+            body: { password }
+        });
+    }
+
+    async enableTotp(code) {
+        return this.request('/auth/totp/enable', {
+            method: 'POST',
+            body: { code }
+        });
+    }
+
+    async disableTotp(password, code) {
+        return this.request('/auth/totp/disable', {
+            method: 'POST',
+            body: { password, code }
         });
     }
 

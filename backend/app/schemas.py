@@ -64,6 +64,7 @@ class UserRegister(BaseModel):
 class UserLogin(BaseModel):
     email: str
     password: str
+    totp_code: Optional[str] = None  # TOTP- oder Recovery-Code (nur bei aktivierter 2FA)
 
 
 class UserResponse(BaseModel):
@@ -72,6 +73,7 @@ class UserResponse(BaseModel):
     display_name: str
     is_active: bool
     is_admin: bool
+    totp_enabled: bool = False
     created_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -105,6 +107,7 @@ class AdminUserUpdate(BaseModel):
     is_admin: Optional[bool] = None
     display_name: Optional[str] = None
     new_password: Optional[str] = None
+    reset_totp: Optional[bool] = None  # True = 2FA des Benutzers zurücksetzen (Gerät verloren)
 
     @field_validator("new_password")
     @classmethod
@@ -120,6 +123,77 @@ class AdminUserUpdate(BaseModel):
         if not re.search(r'[0-9]', v):
             raise ValueError("Passwort muss mindestens eine Zahl enthalten")
         return v
+
+
+# TOTP (Zwei-Faktor) Schemas
+class TotpSetupRequest(BaseModel):
+    password: str  # Re-Auth: Einrichtung nur mit aktuellem Passwort
+
+
+class TotpEnableRequest(BaseModel):
+    code: str
+
+
+class TotpDisableRequest(BaseModel):
+    password: str
+    code: str  # TOTP- oder Recovery-Code
+
+
+# Tag Schemas (Schlagworte, z.B. "Steuerrelevant")
+class TagCreate(BaseModel):
+    name: str
+    color: Optional[str] = None
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v):
+        v = (v or "").strip()
+        if not v or len(v) > 50:
+            raise ValueError("Tag-Name muss zwischen 1 und 50 Zeichen lang sein")
+        return v
+
+    @field_validator("color")
+    @classmethod
+    def validate_color(cls, v):
+        if v is not None and len(v) > 20:
+            raise ValueError("Ungültige Farbe")
+        return v
+
+
+class TagUpdate(BaseModel):
+    name: Optional[str] = None
+    color: Optional[str] = None
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v):
+        if v is None:
+            return v
+        v = v.strip()
+        if not v or len(v) > 50:
+            raise ValueError("Tag-Name muss zwischen 1 und 50 Zeichen lang sein")
+        return v
+
+
+class TagResponse(BaseModel):
+    id: int
+    name: str
+    color: Optional[str] = None
+    transaction_count: Optional[int] = None  # nur in GET /api/tags befüllt
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# Attachment Schemas (Belege)
+class AttachmentResponse(BaseModel):
+    id: int
+    transaction_id: int
+    filename: str
+    content_type: str
+    size_bytes: int
+    created_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Household Schemas
@@ -265,11 +339,20 @@ class TransactionUpdate(BaseModel):
     counterpart_name: Optional[str] = None
     purpose: Optional[str] = None
     booking_date: Optional[date] = None
+    tag_ids: Optional[List[int]] = None  # ersetzt die komplette Tag-Zuweisung (fremde IDs -> 400)
 
 
 class BulkSharedRequest(BaseModel):
     transaction_ids: List[int]
     is_shared: bool = True
+
+
+class BulkTagRequest(BaseModel):
+    """Fügt ein Tag mehreren Transaktionen hinzu (bzw. entfernt es) — ohne die
+    übrigen Tag-Zuweisungen der Transaktionen anzufassen."""
+    transaction_ids: List[int]
+    tag_id: int
+    remove: bool = False
 
 
 class Transaction(TransactionBase):
@@ -290,6 +373,8 @@ class Transaction(TransactionBase):
     created_at: datetime
     updated_at: datetime
     category: Optional[Category] = None
+    tags: List[TagResponse] = []
+    attachments: List[AttachmentResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -300,6 +385,7 @@ class TransactionList(BaseModel):
     page: int
     per_page: int
     pages: int
+    total_amount: Optional[Decimal] = None  # Summe aller Treffer (über alle Seiten)
 
 
 # Split Transaction

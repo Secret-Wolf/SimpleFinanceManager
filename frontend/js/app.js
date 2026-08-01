@@ -74,6 +74,9 @@ async function init() {
     // Load categories for global use
     await loadCategoriesData();
 
+    // Load tags (Filter-Dropdown, Bulk-Auswahl, Vorschläge im Detail-Modal)
+    await loadTagsData();
+
     // Load accounts and populate filter dropdown
     await loadAccountsDropdown();
 

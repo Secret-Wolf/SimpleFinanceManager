@@ -26,6 +26,12 @@
                     <label for="login-password">Passwort</label>
                     <input type="password" id="login-password" class="form-control" required autocomplete="current-password">
                 </div>
+                <div class="form-group hidden" id="login-totp-group">
+                    <label for="login-totp">2FA-Code</label>
+                    <input type="text" id="login-totp" class="form-control" inputmode="numeric"
+                           autocomplete="one-time-code" placeholder="Code aus der Authenticator-App">
+                    <small style="color: var(--text-secondary);">Alternativ einen Recovery-Code eingeben.</small>
+                </div>
                 <div id="login-error" class="auth-error"></div>
                 <button type="submit" class="btn btn-primary" style="width: 100%;">Anmelden</button>
             </form>
@@ -200,6 +206,13 @@
                             </svg>
                             Umbuchungen erkennen
                         </button>
+                        <button class="btn btn-secondary" data-action="showTagsModal">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+                                <line x1="7" y1="7" x2="7.01" y2="7"></line>
+                            </svg>
+                            Tags
+                        </button>
                         <button class="btn btn-primary" data-action="showManualEntryModal">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -248,6 +261,10 @@
                         <option value="expenses">Ausgaben</option>
                     </select>
 
+                    <select id="tx-tag-filter" class="form-control filter-select">
+                        <option value="">Alle Tags</option>
+                    </select>
+
                     <select id="tx-sort" class="form-control filter-select filter-select-wide">
                         <option value="booking_date:desc">Datum (neu → alt)</option>
                         <option value="booking_date:asc">Datum (alt → neu)</option>
@@ -280,6 +297,10 @@
                             <option value="">Kategorie wählen</option>
                         </select>
                         <button class="btn btn-primary btn-sm" data-action="bulkCategorize">Kategorie zuweisen</button>
+                        <select id="bulk-tag" class="form-control bulk-category-select">
+                            <option value="">Tag wählen</option>
+                        </select>
+                        <button class="btn btn-primary btn-sm" data-action="bulkAssignTag">Tag zuweisen</button>
                         <button class="btn btn-secondary btn-sm" data-action="bulkSetShared" data-value="true">Gemeinsam markieren</button>
                         <button class="btn btn-secondary btn-sm" data-action="bulkSetShared" data-value="false">Persoenlich markieren</button>
                         <button class="btn btn-secondary btn-sm" data-action="clearSelection">Auswahl aufheben</button>
@@ -667,6 +688,29 @@
                 <div class="form-group mt-4">
                     <label>Notizen</label>
                     <textarea id="detail-notes" class="form-control" rows="3" placeholder="Notizen zur Transaktion..."></textarea>
+                </div>
+
+                <div class="form-group mt-4">
+                    <label>Tags</label>
+                    <div id="detail-tags-list" class="tag-chips"></div>
+                    <div class="flex gap-2">
+                        <input type="text" id="detail-tag-input" class="form-control" list="tag-suggestions"
+                               placeholder="Tag hinzufügen, z.B. Steuerrelevant"
+                               data-enter-action="addTagToCurrentTransaction" autocomplete="off">
+                        <button class="btn btn-secondary" data-action="addTagToCurrentTransaction" title="Tag hinzufügen">+</button>
+                    </div>
+                    <datalist id="tag-suggestions"></datalist>
+                </div>
+
+                <div class="form-group mt-4">
+                    <label>Belege</label>
+                    <div id="detail-attachments-list" class="attachment-list"></div>
+                    <label class="btn btn-secondary btn-sm" for="detail-attachment-input" style="cursor: pointer;">
+                        📎 Beleg hinzufügen (PDF/Bild)
+                    </label>
+                    <input type="file" id="detail-attachment-input" style="display: none;"
+                           accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                           data-onchange="handleAttachmentSelected">
                 </div>
 
                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 12px;">
@@ -1115,6 +1159,18 @@
 
                 <hr style="border-color: var(--border-color); margin: 8px 0 16px;">
 
+                <!-- Zwei-Faktor-Authentifizierung -->
+                <h4 style="margin-bottom: 12px; color: var(--text-secondary);">Zwei-Faktor-Authentifizierung (2FA)</h4>
+                <div class="form-group" style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                    <div>
+                        <div id="totp-status-text" style="font-weight: 500;">Status wird geladen…</div>
+                        <small id="totp-status-hint" style="color: var(--text-secondary);"></small>
+                    </div>
+                    <button class="btn btn-primary" id="totp-toggle-btn" data-action="startTotpFlow">2FA einrichten</button>
+                </div>
+
+                <hr style="border-color: var(--border-color); margin: 8px 0 16px;">
+
                 <!-- Export -->
                 <h4 style="margin-bottom: 12px; color: var(--text-secondary);">Daten exportieren</h4>
                 <div class="form-group">
@@ -1174,7 +1230,8 @@
             <div class="modal-body">
                 <div class="form-group">
                     <label>Kontoname</label>
-                    <input type="text" id="create-account-name" class="form-control" placeholder="z.B. Haushaltskasse" required>
+                    <input type="text" id="create-account-name" class="form-control" placeholder="z.B. Haushaltskasse"
+                           required data-enter-action="saveNewAccount">
                 </div>
                 <div class="form-group">
                     <label>Kontotyp</label>
@@ -1261,11 +1318,12 @@
                 <p id="bank-pin-conn-name" style="margin-bottom:12px; color: var(--text-secondary);"></p>
                 <div class="form-group">
                     <label>Banking-PIN</label>
-                    <input type="password" id="bank-sync-pin" class="form-control" autocomplete="off" placeholder="Wird nicht gespeichert">
+                    <input type="password" id="bank-sync-pin" class="form-control" autocomplete="off"
+                           placeholder="Wird nicht gespeichert" data-enter-action="confirmBankSync">
                 </div>
                 <div class="form-group">
                     <label>Umsätze ab</label>
-                    <input type="date" id="bank-sync-from" class="form-control">
+                    <input type="date" id="bank-sync-from" class="form-control" data-enter-action="confirmBankSync">
                     <small style="color: var(--text-secondary);">Standard: letzte 90 Tage.</small>
                 </div>
                 <div id="bank-pin-error" class="auth-error"></div>
@@ -1298,7 +1356,8 @@
                 </div>
                 <div class="form-group" id="bank-tan-input-group">
                     <label>TAN</label>
-                    <input type="text" id="bank-tan-input" class="form-control" inputmode="numeric" autocomplete="off">
+                    <input type="text" id="bank-tan-input" class="form-control" inputmode="numeric"
+                           autocomplete="off" data-enter-action="confirmBankTan">
                 </div>
                 <div id="bank-tan-status" style="color: var(--text-secondary); font-size:0.875rem;"></div>
                 <div id="bank-tan-error" class="auth-error"></div>
@@ -1400,6 +1459,99 @@
         </div>
     </div>
 
+    <!-- Tags Modal -->
+    <div id="tags-modal" class="modal-overlay">
+        <div class="modal" style="max-width: 480px;">
+            <div class="modal-header">
+                <h3>Tags verwalten</h3>
+                <button class="modal-close">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 12px;">
+                    Tags markieren Transaktionen quer über alle Kategorien – z.B. <strong>Steuerrelevant</strong>
+                    für die Steuererklärung. Filtere die Transaktionsliste nach einem Tag, um alle markierten
+                    Buchungen samt Summe zu sehen.
+                </p>
+                <div class="flex gap-2" style="margin-bottom: 16px;">
+                    <input type="text" id="new-tag-name" class="form-control"
+                           placeholder="Neues Tag, z.B. Steuerrelevant" maxlength="50"
+                           data-enter-action="createTagFromModal">
+                    <button class="btn btn-primary" data-action="createTagFromModal">Anlegen</button>
+                </div>
+                <div id="tags-modal-list"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-close-modal="tags-modal">Schließen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOTP (2FA) Modal -->
+    <div id="totp-modal" class="modal-overlay">
+        <div class="modal" style="max-width: 460px;">
+            <div class="modal-header">
+                <h3 id="totp-modal-title">2FA einrichten</h3>
+                <button class="modal-close">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="totp-step-start">
+                    <p id="totp-start-text" style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 12px;"></p>
+                    <div class="form-group">
+                        <label>Passwort</label>
+                        <input type="password" id="totp-password" class="form-control"
+                               autocomplete="current-password" data-enter-action="submitTotpStart">
+                    </div>
+                    <div class="form-group hidden" id="totp-disable-code-group">
+                        <label>2FA-Code</label>
+                        <input type="text" id="totp-disable-code" class="form-control" inputmode="numeric"
+                               autocomplete="one-time-code" placeholder="Code aus der App oder Recovery-Code"
+                               data-enter-action="submitTotpStart">
+                    </div>
+                </div>
+                <div id="totp-step-verify" class="hidden">
+                    <p style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 12px;">
+                        Scanne den QR-Code mit einer Authenticator-App (z.B. Aegis, Google Authenticator,
+                        1Password) und gib danach den angezeigten 6-stelligen Code ein.
+                    </p>
+                    <div id="totp-qr" class="totp-qr"></div>
+                    <details style="margin: 8px 0 12px;">
+                        <summary style="cursor: pointer; color: var(--text-secondary); font-size: 0.8rem;">Secret manuell eingeben</summary>
+                        <code id="totp-secret" style="word-break: break-all; font-size: 0.8rem;"></code>
+                    </details>
+                    <div class="form-group">
+                        <label>Bestätigungscode</label>
+                        <input type="text" id="totp-verify-code" class="form-control" inputmode="numeric"
+                               autocomplete="one-time-code" data-enter-action="submitTotpVerify">
+                    </div>
+                </div>
+                <div id="totp-step-recovery" class="hidden">
+                    <p style="font-size: 0.875rem; margin-bottom: 12px;">
+                        <strong>2FA ist jetzt aktiv.</strong> Bewahre diese Recovery-Codes sicher auf
+                        (Passwort-Manager oder Ausdruck) – jeder Code funktioniert genau einmal, falls du
+                        keinen Zugriff auf die Authenticator-App hast.
+                    </p>
+                    <pre id="totp-recovery-codes" class="totp-recovery"></pre>
+                    <button class="btn btn-secondary btn-sm" data-action="copyRecoveryCodes">In Zwischenablage kopieren</button>
+                </div>
+                <div id="totp-modal-error" class="auth-error"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-close-modal="totp-modal" id="totp-cancel-btn">Abbrechen</button>
+                <button class="btn btn-primary" id="totp-next-btn" data-action="submitTotpStart">Weiter</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Container -->
     <div id="toast-container" class="toast-container"></div>
 
@@ -1407,6 +1559,7 @@
     <script src="/static/js/event-handlers.js"></script>
     <script src="/static/js/api.js"></script>
     <script src="/static/js/utils.js"></script>
+    <script src="/static/js/tags.js"></script>
     <script src="/static/js/transactions.js"></script>
     <script src="/static/js/categories.js"></script>
     <script src="/static/js/rules.js"></script>

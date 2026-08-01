@@ -12,7 +12,20 @@ from .client_ip import client_ip_key
 from .config import settings
 from .database import init_db
 from .migrations import run_migrations
-from .routers import accounts, auth, backup, banking, categories, households, imports, rules, stats, transactions
+from .routers import (
+    accounts,
+    attachments,
+    auth,
+    backup,
+    banking,
+    categories,
+    households,
+    imports,
+    rules,
+    stats,
+    tags,
+    transactions,
+)
 
 # Rate limiter (Bucket = echte Client-IP, spoof-sicher; siehe app/client_ip.py)
 limiter = Limiter(key_func=client_ip_key, default_limits=[f"{settings.RATE_LIMIT_PER_MINUTE}/minute"])
@@ -72,6 +85,9 @@ async def limit_request_body(request: Request, call_next):
             limit = _BODY_LIMIT_RESTORE
         elif path.startswith("/api/import"):
             limit = _BODY_LIMIT_IMPORT
+        elif path.startswith("/api/transactions/") and path.endswith("/attachments"):
+            # Beleg-Upload (PDF/Bilder) — gleiche Grenze wie der CSV-Import
+            limit = _BODY_LIMIT_IMPORT
         else:
             limit = _BODY_LIMIT_DEFAULT
         if length > limit:
@@ -126,6 +142,8 @@ app.include_router(accounts.router)
 app.include_router(households.router)
 app.include_router(banking.router)
 app.include_router(backup.router)
+app.include_router(tags.router)
+app.include_router(attachments.router)
 
 
 @app.get("/api/health")

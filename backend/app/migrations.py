@@ -325,4 +325,71 @@ def run_migrations():
                 conn.commit()
                 logger.info("Migration: token_version added to users")
 
+        # Migration 19: Add TOTP columns to users (Zwei-Faktor-Authentifizierung, opt-in)
+        if 'users' in inspector.get_table_names():
+            columns = [col['name'] for col in inspector.get_columns('users')]
+            if 'totp_secret' not in columns:
+                logger.info("Migration: Adding TOTP columns to users")
+                conn.execute(text("ALTER TABLE users ADD COLUMN totp_secret VARCHAR"))
+                conn.execute(text("ALTER TABLE users ADD COLUMN totp_enabled BOOLEAN NOT NULL DEFAULT 0"))
+                conn.execute(text("ALTER TABLE users ADD COLUMN totp_recovery_codes TEXT"))
+                conn.execute(text("ALTER TABLE users ADD COLUMN totp_last_counter INTEGER"))
+                conn.commit()
+                logger.info("Migration: TOTP columns added to users")
+
+        # Migration 20: Add tags + transaction_tags tables (Schlagworte, z.B. "Steuerrelevant").
+        # Ersetzt die nie benutzte Komma-String-Spalte transactions.tags (best-effort Drop).
+        if 'tags' not in inspector.get_table_names():
+            logger.info("Migration: Creating tags + transaction_tags tables")
+            conn.execute(text("""
+                CREATE TABLE tags (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    name VARCHAR(50) NOT NULL,
+                    color VARCHAR(20),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT uq_tags_user_name UNIQUE (user_id, name)
+                )
+            """))
+            conn.execute(text("""
+                CREATE TABLE transaction_tags (
+                    transaction_id INTEGER NOT NULL REFERENCES transactions(id),
+                    tag_id INTEGER NOT NULL REFERENCES tags(id),
+                    PRIMARY KEY (transaction_id, tag_id)
+                )
+            """))
+            conn.commit()
+            inspector = inspect(engine)
+            logger.info("Migration: tags + transaction_tags tables created")
+        if 'transactions' in inspector.get_table_names():
+            columns = [col['name'] for col in inspector.get_columns('transactions')]
+            if 'tags' in columns:
+                # Alte, nie befüllte Spalte; DROP COLUMN braucht SQLite >= 3.35 — bei
+                # älteren Versionen bleibt die tote Spalte einfach stehen (unschädlich).
+                try:
+                    conn.execute(text("ALTER TABLE transactions DROP COLUMN tags"))
+                    conn.commit()
+                    logger.info("Migration: legacy transactions.tags column dropped")
+                except Exception as e:  # pragma: no cover - hängt von der SQLite-Version ab
+                    conn.rollback()
+                    logger.warning(f"Migration: could not drop legacy transactions.tags column: {e}")
+
+        # Migration 21: Add attachments table (Belege: PDF/PNG/JPG an Transaktionen)
+        if 'attachments' not in inspector.get_table_names():
+            logger.info("Migration: Creating attachments table")
+            conn.execute(text("""
+                CREATE TABLE attachments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    transaction_id INTEGER NOT NULL REFERENCES transactions(id),
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    filename VARCHAR(255) NOT NULL,
+                    content_type VARCHAR(100) NOT NULL,
+                    size_bytes INTEGER NOT NULL,
+                    stored_name VARCHAR(100) NOT NULL UNIQUE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.commit()
+            logger.info("Migration: attachments table created")
+
         logger.info("All migrations completed")

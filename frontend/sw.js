@@ -22,6 +22,7 @@ const SHELL_ASSETS = [
     '/static/js/event-handlers.js',
     '/static/js/api.js',
     '/static/js/utils.js',
+    '/static/js/tags.js',
     '/static/js/transactions.js',
     '/static/js/categories.js',
     '/static/js/rules.js',

@@ -40,6 +40,26 @@
         }
     });
 
+    // --- Enter-Key Delegation ---
+    // Inputs mit data-enter-action lösen bei Enter dieselbe Aktion aus wie der
+    // zugehörige Button (z.B. PIN-Feld -> "Abrufen"), da die Modal-Felder in
+    // keinem <form> liegen und Enter sonst nichts tut.
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter') return;
+        var el = e.target.closest('[data-enter-action]');
+        if (!el) return;
+        e.preventDefault();
+
+        var action = el.dataset.enterAction;
+        if (CLICK_ACTIONS[action]) {
+            CLICK_ACTIONS[action](el);
+            return;
+        }
+        if (typeof window[action] === 'function') {
+            window[action].apply(null, extractArgs(el));
+        }
+    });
+
     // Extract arguments from data attributes in order
     function extractArgs(el) {
         var args = [];
@@ -159,6 +179,7 @@
         bind('change', 'tx-end-date', function () { applyTransactionFilters(); });
         bind('change', 'tx-category-filter', function () { applyTransactionFilters(); });
         bind('change', 'tx-amount-type', function () { applyTransactionFilters(); });
+        bind('change', 'tx-tag-filter', function () { applyTransactionFilters(); });
         bind('change', 'uncategorized-filter', function () { applyTransactionFilters(); });
         bind('change', 'shared-filter', function () { applyTransactionFilters(); });
         bind('change', 'transfer-filter', function () { applyTransactionFilters(); });

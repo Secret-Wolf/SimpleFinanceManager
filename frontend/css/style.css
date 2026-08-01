@@ -2083,3 +2083,180 @@ tr.rule-row-inactive .rule-status {
         width: 100%;
     }
 }
+
+/* ===== Tags (Schlagworte) ===== */
+
+.tag-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+    min-height: 24px;
+}
+
+.tag-chip {
+    --tag-color: var(--primary-color);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    background-color: color-mix(in srgb, var(--tag-color) 14%, transparent);
+    color: var(--tag-color);
+    border: 1px solid color-mix(in srgb, var(--tag-color) 35%, transparent);
+    white-space: nowrap;
+}
+
+.tag-chip-sm {
+    padding: 1px 8px;
+    font-size: 0.7rem;
+}
+
+.tag-chip-remove {
+    border: none;
+    background: none;
+    color: inherit;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0 0 0 2px;
+    cursor: pointer;
+    opacity: 0.7;
+}
+
+.tag-chip-remove:hover {
+    opacity: 1;
+}
+
+.tag-chips-empty {
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+}
+
+.tx-row-tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    margin-top: 3px;
+}
+
+.attachment-badge {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+/* Tags-Verwaltung (Modal) */
+.tag-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.tag-row:last-child {
+    border-bottom: none;
+}
+
+.tag-row-count {
+    flex: 1;
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+    text-align: right;
+}
+
+.tag-row-actions {
+    display: flex;
+    gap: 6px;
+}
+
+/* ===== Belege (Attachments) ===== */
+
+.attachment-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.attachment-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    background-color: var(--bg-tertiary);
+    border-radius: 8px;
+}
+
+.attachment-link {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+    text-decoration: none;
+    font-size: 0.875rem;
+}
+
+.attachment-link:hover {
+    color: var(--primary-color);
+    text-decoration: underline;
+}
+
+.attachment-size {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+.attachment-delete {
+    color: var(--text-secondary);
+}
+
+.attachment-delete:hover {
+    color: var(--danger-color);
+}
+
+/* ===== Konto löschen ===== */
+
+.account-delete-btn {
+    color: var(--text-muted);
+}
+
+.account-delete-btn:hover {
+    color: var(--danger-color);
+    background-color: color-mix(in srgb, var(--danger-color) 12%, transparent);
+}
+
+/* ===== Zwei-Faktor (TOTP) ===== */
+
+.totp-qr {
+    display: flex;
+    justify-content: center;
+    padding: 12px;
+    background: #ffffff; /* QR braucht hellen Hintergrund, auch im Dark Mode */
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+}
+
+.totp-qr svg {
+    width: 200px;
+    height: 200px;
+}
+
+.totp-recovery {
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.9rem;
+    line-height: 1.7;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+    user-select: all;
+}

@@ -1,5 +1,7 @@
 // Accounts Module
 
+let _accountsSummaryCache = []; // letzte Konten-Summary (für Lösch-Dialog: Name + Anzahl Transaktionen)
+
 async function loadAccounts() {
     const container = document.getElementById('accounts-list');
     const totalBalanceEl = document.getElementById('total-balance');
@@ -7,6 +9,7 @@ async function loadAccounts() {
 
     try {
         const data = await api.getAccountsSummary();
+        _accountsSummaryCache = data.accounts;
 
         // Update summary
         totalBalanceEl.textContent = formatCurrency(data.total_balance);
@@ -35,7 +38,15 @@ async function loadAccounts() {
                         <span class="bank-icon">${getBankIcon(account.bank_name)}</span>
                         <span class="bank-name">${escapeHtml(account.bank_name || 'Unbekannte Bank')}</span>
                     </div>
-                    <span class="account-type-badge">${escapeHtml(getAccountTypeName(account.account_type))}</span>
+                    <div class="flex items-center gap-2">
+                        <span class="account-type-badge">${escapeHtml(getAccountTypeName(account.account_type))}</span>
+                        <button class="btn btn-icon account-delete-btn" data-action="deleteAccountConfirm" data-id="${account.id}" title="Konto löschen">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
                 <div class="account-name">${escapeHtml(account.name)}</div>
                 <div class="account-iban">${escapeHtml(formatIban(account.iban))}</div>
@@ -140,6 +151,34 @@ async function saveNewAccount() {
         await api.createAccount({ name, account_type: accountType });
         showToast('Konto erstellt', 'success');
         closeModal('create-account-modal');
+        loadAccounts();
+        await loadAccountsDropdown();
+    } catch (error) {
+        showToast('Fehler: ' + error.message, 'error');
+    }
+}
+
+async function deleteAccountConfirm(accountId) {
+    const account = _accountsSummaryCache.find(a => a.id === accountId);
+    if (!account) return;
+
+    const txCount = account.transaction_count || 0;
+    const warning = txCount > 0
+        ? `\n\nACHTUNG: Dabei werden ${txCount} Transaktionen endgültig gelöscht (inkl. Tags und Belegen).`
+        : '';
+    if (!confirm(`Konto "${account.name}" wirklich löschen?${warning}`)) return;
+
+    try {
+        const result = await api.deleteAccount(accountId);
+        showToast(result.message, 'success');
+
+        // Falls das gelöschte Konto oben links ausgewählt war: auf "Alle Konten" zurück
+        if (selectedAccountId === accountId) {
+            selectedAccountId = null;
+            const dropdown = document.getElementById('global-account-filter');
+            if (dropdown) dropdown.value = '';
+        }
+
         loadAccounts();
         await loadAccountsDropdown();
     } catch (error) {

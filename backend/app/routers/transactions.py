@@ -10,13 +10,14 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, or_
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from .. import schemas
 from ..audit import log_data_event
 from ..auth import get_current_user
 from ..database import get_db
-from ..models import Account, Category, Transaction, User
+from ..models import Account, Category, Tag, Transaction, User, transaction_tags
+from ..services.attachments import delete_attachments_for_transactions
 from ..services.category_tree import get_descendant_ids
 from ..services.transfers import detect_transfers_for_user
 
@@ -52,6 +53,7 @@ def get_transactions(
     amount_type: Optional[str] = Query(None, pattern="^(income|expenses|all)$"),
     search: Optional[str] = None,
     uncategorized_only: bool = False,
+    tag_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -61,9 +63,8 @@ def get_transactions(
     user_account_ids = [a.id for a in db.query(Account.id).filter(Account.user_id == current_user.id).all()]
     logger.info(f"[Transactions] user={current_user.id} account_id={account_id} user_account_ids={user_account_ids}")
 
-    query = db.query(Transaction).options(
-        joinedload(Transaction.category)
-    ).filter(
+    # Basis-Query ohne Loader-Optionen — davon zweigen count()/sum() ab
+    query = db.query(Transaction).filter(
         Transaction.is_split_parent == False,
         Transaction.account_id.in_(user_account_ids) if user_account_ids else Transaction.id == -1,
     )
@@ -113,8 +114,19 @@ def get_transactions(
             )
         )
 
-    # Get total count
+    if tag_id:
+        # Nur eigene Tags filtern (fremde Tag-IDs liefern eine leere Liste)
+        tag = db.query(Tag).filter(Tag.id == tag_id, Tag.user_id == current_user.id).first()
+        if tag:
+            query = query.join(
+                transaction_tags, Transaction.id == transaction_tags.c.transaction_id
+            ).filter(transaction_tags.c.tag_id == tag.id)
+        else:
+            query = query.filter(Transaction.id == -1)
+
+    # Get total count + Summe aller Treffer (über alle Seiten, z.B. für Tag-Auswertungen)
     total = query.count()
+    total_amount = query.with_entities(func.sum(Transaction.amount)).scalar() or Decimal("0")
     logger.info(f"[Transactions] account_id={account_id} total_results={total}")
 
     # Apply sorting
@@ -135,9 +147,13 @@ def get_transactions(
     else:
         query = query.order_by(order_col.asc(), Transaction.id.asc())
 
-    # Pagination
+    # Pagination (Loader-Optionen erst hier — count()/sum() oben brauchen sie nicht)
     offset = (page - 1) * per_page
-    transactions = query.offset(offset).limit(per_page).all()
+    transactions = query.options(
+        joinedload(Transaction.category),
+        selectinload(Transaction.tags),
+        selectinload(Transaction.attachments),
+    ).offset(offset).limit(per_page).all()
 
     pages = (total + per_page - 1) // per_page
 
@@ -146,7 +162,8 @@ def get_transactions(
         total=total,
         page=page,
         per_page=per_page,
-        pages=pages
+        pages=pages,
+        total_amount=total_amount,
     )
 
 
@@ -162,7 +179,8 @@ def export_transactions(
     user_account_ids = [a.id for a in db.query(Account.id).filter(Account.user_id == current_user.id).all()]
 
     query = db.query(Transaction).options(
-        joinedload(Transaction.category)
+        joinedload(Transaction.category),
+        selectinload(Transaction.tags),
     ).filter(
         Transaction.is_split_parent == False,
         Transaction.account_id.in_(user_account_ids) if user_account_ids else Transaction.id == -1,
@@ -185,7 +203,7 @@ def export_transactions(
     writer.writerow([
         'Datum', 'Wertstellung', 'Empfänger/Auftraggeber', 'IBAN', 'BIC',
         'Buchungsart', 'Verwendungszweck', 'Betrag', 'Währung', 'Saldo danach',
-        'Kategorie', 'Konto', 'Bank', 'Gemeinsam', 'Umbuchung', 'Notizen'
+        'Kategorie', 'Konto', 'Bank', 'Gemeinsam', 'Umbuchung', 'Tags', 'Notizen'
     ])
 
     for tx in transactions:
@@ -206,6 +224,7 @@ def export_transactions(
             _csv_safe(tx.bank_name),
             'Ja' if tx.is_shared else 'Nein',
             'Ja' if tx.is_transfer else 'Nein',
+            _csv_safe(', '.join(t.name for t in tx.tags)),
             _csv_safe(tx.notes)
         ])
 
@@ -230,7 +249,9 @@ def get_transaction(transaction_id: int, db: Session = Depends(get_db), current_
 
     transaction = db.query(Transaction).options(
         joinedload(Transaction.category),
-        joinedload(Transaction.split_children)
+        joinedload(Transaction.split_children),
+        selectinload(Transaction.tags),
+        selectinload(Transaction.attachments),
     ).filter(
         Transaction.id == transaction_id,
         Transaction.account_id.in_(user_account_ids) if user_account_ids else Transaction.id == -1,
@@ -299,6 +320,16 @@ def update_transaction(
     if update.booking_date is not None:
         transaction.booking_date = update.booking_date
         transaction.value_date = update.booking_date
+
+    if update.tag_ids is not None:
+        # Ersetzt die komplette Tag-Zuweisung; nur eigene Tags erlaubt
+        unique_ids = list(dict.fromkeys(update.tag_ids))
+        tags = db.query(Tag).filter(
+            Tag.id.in_(unique_ids), Tag.user_id == current_user.id
+        ).all() if unique_ids else []
+        if len(tags) != len(unique_ids):
+            raise HTTPException(status_code=400, detail="Tag nicht gefunden")
+        transaction.tags = tags
 
     db.commit()
     db.refresh(transaction)
@@ -410,6 +441,22 @@ def delete_transaction(transaction_id: int, db: Session = Depends(get_db), curre
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaktion nicht gefunden")
 
+    child_ids = []
+    if transaction.is_split_parent:
+        child_ids = [
+            t.id for t in db.query(Transaction.id).filter(
+                Transaction.parent_transaction_id == transaction_id
+            ).all()
+        ]
+
+    # Belege (DB-Zeilen + Dateien) für die Transaktion und etwaige Split-Kinder entfernen
+    delete_attachments_for_transactions(db, [transaction_id] + child_ids)
+
+    # Tag-Zuweisungen der Split-Kinder per Bulk räumen (das Bulk-Delete unten läuft an
+    # ORM-Kaskaden vorbei); die eigene Zuweisung entfernt das ORM bei db.delete() selbst
+    if child_ids:
+        db.execute(transaction_tags.delete().where(transaction_tags.c.transaction_id.in_(child_ids)))
+
     # If this is a split parent, also delete children
     if transaction.is_split_parent:
         db.query(Transaction).filter(
@@ -511,6 +558,42 @@ def bulk_set_shared(
 
     label = "als gemeinsam markiert" if data.is_shared else "als persönlich markiert"
     return {"message": f"{updated} Transaktionen {label}", "updated_count": updated}
+
+
+@router.post("/bulk-tag")
+def bulk_tag(
+    data: schemas.BulkTagRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Fügt ein Tag mehreren Transaktionen hinzu bzw. entfernt es (additiv,
+    bestehende andere Tag-Zuweisungen bleiben unberührt)."""
+    tag = db.query(Tag).filter(Tag.id == data.tag_id, Tag.user_id == current_user.id).first()
+    if not tag:
+        raise HTTPException(status_code=400, detail="Tag nicht gefunden")
+
+    user_account_ids = [a.id for a in db.query(Account.id).filter(Account.user_id == current_user.id).all()]
+
+    transactions = db.query(Transaction).options(selectinload(Transaction.tags)).filter(
+        Transaction.id.in_(data.transaction_ids),
+        Transaction.account_id.in_(user_account_ids) if user_account_ids else Transaction.id == -1,
+    ).all()
+
+    updated = 0
+    for tx in transactions:
+        if data.remove:
+            if tag in tx.tags:
+                tx.tags.remove(tag)
+                updated += 1
+        else:
+            if tag not in tx.tags:
+                tx.tags.append(tag)
+                updated += 1
+
+    db.commit()
+
+    label = f'Tag "{tag.name}" entfernt' if data.remove else f'Tag "{tag.name}" zugewiesen'
+    return {"message": f"{updated} Transaktionen: {label}", "updated_count": updated}
 
 
 @router.post("/manual", response_model=schemas.Transaction)

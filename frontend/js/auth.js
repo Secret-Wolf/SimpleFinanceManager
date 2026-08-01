@@ -51,6 +51,13 @@ function showLogin() {
     document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active'));
     document.body.style.overflow = '';
 
+    // 2FA-Feld zurücksetzen (wird erst nach Passwort-Prüfung wieder eingeblendet)
+    const totpGroup = document.getElementById('login-totp-group');
+    if (totpGroup) {
+        totpGroup.classList.add('hidden');
+        document.getElementById('login-totp').value = '';
+    }
+
     document.getElementById('login-screen').classList.remove('hidden');
     document.getElementById('setup-screen').classList.add('hidden');
     document.getElementById('app-container').classList.add('hidden');
@@ -89,19 +96,38 @@ async function handleLogin(e) {
     const password = document.getElementById('login-password').value;
     const errorEl = document.getElementById('login-error');
     const submitBtn = e.target.querySelector('button[type="submit"]');
+    const totpGroup = document.getElementById('login-totp-group');
+    const totpInput = document.getElementById('login-totp');
 
     errorEl.textContent = '';
     submitBtn.disabled = true;
+
+    const body = { email, password };
+    if (!totpGroup.classList.contains('hidden') && totpInput.value.trim()) {
+        body.totp_code = totpInput.value.trim();
+    }
 
     try {
         const response = await fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password }),
+            body: JSON.stringify(body),
         });
 
         if (response.ok) {
             const data = await response.json();
+
+            // Passwort ok, aber 2FA aktiv: Code-Feld einblenden und erneut senden lassen
+            if (data.totp_required) {
+                totpGroup.classList.remove('hidden');
+                totpInput.value = '';
+                totpInput.focus();
+                errorEl.textContent = 'Bitte den 2FA-Code aus deiner Authenticator-App eingeben.';
+                return;
+            }
+
+            totpGroup.classList.add('hidden');
+            totpInput.value = '';
             currentUser = data.user;
             showApp();
             init();
@@ -110,6 +136,10 @@ async function handleLogin(e) {
         } else {
             const error = await response.json().catch(() => ({}));
             errorEl.textContent = error.detail || 'Login fehlgeschlagen';
+            if (!totpGroup.classList.contains('hidden')) {
+                totpInput.value = '';
+                totpInput.focus();
+            }
         }
     } catch (error) {
         errorEl.textContent = 'Verbindungsfehler';
@@ -198,7 +228,146 @@ function showUserProfile() {
         `;
     }
 
+    // 2FA-Status laden (asynchron, blockiert das Modal nicht)
+    refreshTotpStatus();
+
     openModal('user-profile-modal');
+}
+
+// --- Zwei-Faktor-Authentifizierung (TOTP) ------------------------------------
+
+let _totpEnabled = false;
+let _totpMode = 'enable'; // 'enable' | 'disable'
+
+async function refreshTotpStatus() {
+    const textEl = document.getElementById('totp-status-text');
+    const hintEl = document.getElementById('totp-status-hint');
+    const btn = document.getElementById('totp-toggle-btn');
+    if (!textEl) return;
+
+    try {
+        const status = await api.getTotpStatus();
+        _totpEnabled = status.enabled;
+        if (status.enabled) {
+            textEl.textContent = '2FA ist aktiv ✓';
+            hintEl.textContent = `${status.recovery_codes_remaining} Recovery-Codes übrig`;
+            btn.textContent = '2FA deaktivieren';
+            btn.classList.remove('btn-primary');
+            btn.classList.add('btn-danger');
+        } else {
+            textEl.textContent = '2FA ist nicht aktiv';
+            hintEl.textContent = 'Empfohlen: schützt den Login zusätzlich zum Passwort.';
+            btn.textContent = '2FA einrichten';
+            btn.classList.add('btn-primary');
+            btn.classList.remove('btn-danger');
+        }
+    } catch (e) {
+        textEl.textContent = '2FA-Status nicht verfügbar';
+        hintEl.textContent = '';
+    }
+}
+
+function showTotpStep(step) {
+    ['start', 'verify', 'recovery'].forEach(s => {
+        document.getElementById('totp-step-' + s).classList.toggle('hidden', s !== step);
+    });
+}
+
+function startTotpFlow() {
+    _totpMode = _totpEnabled ? 'disable' : 'enable';
+
+    document.getElementById('totp-modal-title').textContent =
+        _totpMode === 'enable' ? '2FA einrichten' : '2FA deaktivieren';
+    document.getElementById('totp-start-text').textContent = _totpMode === 'enable'
+        ? 'Bestätige zunächst dein Passwort, um die Einrichtung zu starten.'
+        : 'Zum Deaktivieren Passwort und einen gültigen 2FA-Code (oder Recovery-Code) eingeben.';
+    document.getElementById('totp-password').value = '';
+    document.getElementById('totp-disable-code').value = '';
+    document.getElementById('totp-verify-code').value = '';
+    document.getElementById('totp-modal-error').textContent = '';
+    document.getElementById('totp-disable-code-group').classList.toggle('hidden', _totpMode === 'enable');
+
+    const nextBtn = document.getElementById('totp-next-btn');
+    nextBtn.dataset.action = 'submitTotpStart';
+    nextBtn.textContent = _totpMode === 'enable' ? 'Weiter' : '2FA deaktivieren';
+    nextBtn.classList.remove('hidden');
+    document.getElementById('totp-cancel-btn').textContent = 'Abbrechen';
+
+    showTotpStep('start');
+    openModal('totp-modal');
+    setTimeout(() => document.getElementById('totp-password').focus(), 100);
+}
+
+async function submitTotpStart() {
+    const password = document.getElementById('totp-password').value;
+    const errorEl = document.getElementById('totp-modal-error');
+    errorEl.textContent = '';
+
+    if (!password) {
+        errorEl.textContent = 'Bitte Passwort eingeben.';
+        return;
+    }
+
+    try {
+        if (_totpMode === 'enable') {
+            const data = await api.setupTotp(password);
+            // QR-SVG kommt vom eigenen Server (Server-generiert, kein User-Input)
+            document.getElementById('totp-qr').innerHTML = data.qr_svg;
+            document.getElementById('totp-secret').textContent = data.secret;
+            showTotpStep('verify');
+            const nextBtn = document.getElementById('totp-next-btn');
+            nextBtn.dataset.action = 'submitTotpVerify';
+            nextBtn.textContent = 'Aktivieren';
+            setTimeout(() => document.getElementById('totp-verify-code').focus(), 100);
+        } else {
+            const code = document.getElementById('totp-disable-code').value.trim();
+            if (!code) {
+                errorEl.textContent = 'Bitte 2FA-Code eingeben.';
+                return;
+            }
+            await api.disableTotp(password, code);
+            closeModal('totp-modal');
+            showToast('2FA deaktiviert', 'success');
+            refreshTotpStatus();
+        }
+    } catch (error) {
+        errorEl.textContent = error.message;
+    }
+}
+
+async function submitTotpVerify() {
+    const code = document.getElementById('totp-verify-code').value.trim();
+    const errorEl = document.getElementById('totp-modal-error');
+    errorEl.textContent = '';
+
+    if (!code) {
+        errorEl.textContent = 'Bitte den Code aus der App eingeben.';
+        return;
+    }
+
+    try {
+        const result = await api.enableTotp(code);
+        document.getElementById('totp-recovery-codes').textContent = result.recovery_codes.join('\n');
+        showTotpStep('recovery');
+        document.getElementById('totp-next-btn').classList.add('hidden');
+        document.getElementById('totp-cancel-btn').textContent = 'Fertig';
+        showToast('2FA aktiviert', 'success');
+        refreshTotpStatus();
+    } catch (error) {
+        errorEl.textContent = error.message;
+    }
+}
+
+function copyRecoveryCodes() {
+    const text = document.getElementById('totp-recovery-codes').textContent;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(
+            () => showToast('Recovery-Codes kopiert', 'success'),
+            () => showToast('Kopieren nicht möglich — bitte manuell notieren', 'error')
+        );
+    } else {
+        showToast('Kopieren nicht möglich — bitte manuell notieren', 'error');
+    }
 }
 
 async function saveUserProfile() {

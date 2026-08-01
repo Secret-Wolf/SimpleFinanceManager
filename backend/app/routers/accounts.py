@@ -9,7 +9,8 @@ from .. import schemas
 from ..audit import log_data_event
 from ..auth import get_current_user
 from ..database import get_db
-from ..models import Account, Transaction, User
+from ..models import Account, Transaction, User, transaction_tags
+from ..services.attachments import delete_attachments_for_transactions
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
@@ -198,3 +199,50 @@ def update_account(
     )
 
     return {"status": "success", "account": account}
+
+
+@router.delete("/{account_id}")
+def delete_account(
+    account_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Konto endgültig löschen — inklusive aller zugehörigen Transaktionen
+    (samt Tag-Zuweisungen und Belegen). Bei FinTS-/CSV-Konten gilt: ein erneuter
+    Abruf/Import legt Konto und Umsätze wieder an (die Import-Hashes sind weg)."""
+    account = db.query(Account).filter(
+        Account.id == account_id, Account.user_id == current_user.id
+    ).first()
+
+    if not account:
+        raise HTTPException(status_code=404, detail="Konto nicht gefunden")
+
+    tx_ids = [
+        t.id for t in db.query(Transaction.id).filter(Transaction.account_id == account_id).all()
+    ]
+
+    # Abhängigkeiten zuerst: Belege (Zeilen + Dateien) und Tag-Zuweisungen,
+    # dann die Transaktionen per Bulk (läuft an ORM-Kaskaden vorbei)
+    delete_attachments_for_transactions(db, tx_ids)
+    if tx_ids:
+        db.execute(transaction_tags.delete().where(transaction_tags.c.transaction_id.in_(tx_ids)))
+        db.query(Transaction).filter(Transaction.account_id == account_id).delete(
+            synchronize_session=False
+        )
+
+    account_name = account.name
+    db.delete(account)
+    db.commit()
+
+    log_data_event(
+        "delete",
+        user_id=current_user.id,
+        resource="account",
+        resource_id=account_id,
+        detail=f"name={account_name} transactions_deleted={len(tx_ids)}",
+    )
+
+    return {
+        "message": f"Konto \"{account_name}\" gelöscht ({len(tx_ids)} Transaktionen entfernt)",
+        "deleted_transactions": len(tx_ids),
+    }

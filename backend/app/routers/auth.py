@@ -22,6 +22,15 @@ from ..client_ip import client_ip_key, get_client_ip
 from ..config import settings as app_settings
 from ..database import get_db
 from ..models import Account, CategorizationRule, Category, User
+from ..totp import (
+    generate_recovery_codes,
+    generate_secret,
+    provisioning_uri,
+    qr_svg,
+    remaining_recovery_codes,
+    use_recovery_code,
+    verify_totp,
+)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 limiter = Limiter(key_func=client_ip_key)
@@ -152,6 +161,15 @@ def login(request: Request, data: schemas.UserLogin, response: Response, db: Ses
             detail="Konto deaktiviert",
         )
 
+    # Zwei-Faktor: Passwort allein reicht nicht, wenn TOTP aktiviert ist
+    if user.totp_enabled and user.totp_secret:
+        code = (data.totp_code or "").strip()
+        if not code:
+            # Passwort war korrekt, aber es fehlt der 2FA-Code — keine Cookies setzen.
+            # Das Frontend blendet daraufhin das Code-Feld ein und sendet erneut.
+            return {"totp_required": True}
+        _check_second_factor(db, user, code, client_ip)
+
     set_auth_cookies(response, user)
 
     log_auth_event("login", ip=client_ip, user_id=user.id, user_email=user.email)
@@ -160,6 +178,46 @@ def login(request: Request, data: schemas.UserLogin, response: Response, db: Ses
         "message": "Erfolgreich eingeloggt",
         "user": schemas.UserResponse.model_validate(user),
     }
+
+
+def _check_second_factor(db: Session, user: User, code: str, client_ip: str) -> None:
+    """Prüft beim Login den zweiten Faktor: TOTP-Code (6 Ziffern) oder Recovery-Code.
+    Wirft 401 bei ungültigem/bereits benutztem Code; verbraucht benutzte Recovery-Codes."""
+    compact = code.replace(" ", "")
+    if compact.isdigit() and len(compact) == 6:
+        result, counter = verify_totp(user.totp_secret, compact, user.totp_last_counter)
+        if result == "ok":
+            user.totp_last_counter = counter
+            db.commit()
+            return
+        if result == "used":
+            log_auth_event(
+                "login_failed", ip=client_ip, user_id=user.id, user_email=user.email,
+                status="failure", detail="totp_replay",
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Dieser 2FA-Code wurde bereits verwendet — bitte den nächsten Code eingeben",
+            )
+    else:
+        remaining = use_recovery_code(user.totp_recovery_codes, code)
+        if remaining is not None:
+            user.totp_recovery_codes = remaining
+            db.commit()
+            log_auth_event(
+                "login_recovery_code", ip=client_ip, user_id=user.id, user_email=user.email,
+                detail=f"remaining={remaining_recovery_codes(remaining)}",
+            )
+            return
+
+    log_auth_event(
+        "login_failed", ip=client_ip, user_id=user.id, user_email=user.email,
+        status="failure", detail="invalid_totp",
+    )
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Ungültiger 2FA-Code",
+    )
 
 
 @router.post("/logout")
@@ -263,6 +321,129 @@ def change_password(
     return {"message": "Passwort geändert"}
 
 
+# --- TOTP-Zwei-Faktor (Selfservice) -----------------------------------------
+
+@router.get("/totp/status")
+def totp_status(user: User = Depends(get_current_user)):
+    """2FA-Status des eingeloggten Benutzers (für die Profil-Ansicht)"""
+    return {
+        "enabled": bool(user.totp_enabled),
+        "recovery_codes_remaining": remaining_recovery_codes(user.totp_recovery_codes)
+        if user.totp_enabled else 0,
+    }
+
+
+@router.post("/totp/setup")
+def totp_setup(
+    request: Request,
+    data: schemas.TotpSetupRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Startet die 2FA-Einrichtung: erzeugt ein Secret und liefert QR-Code + otpauth-URL.
+    Aktiv wird 2FA erst nach Bestätigung eines gültigen Codes via /totp/enable."""
+    client_ip = get_client_ip(request)
+
+    if not verify_password(data.password, user.hashed_password):
+        log_auth_event(
+            "totp_setup_failed", ip=client_ip, user_id=user.id,
+            status="failure", detail="wrong_password",
+        )
+        raise HTTPException(status_code=400, detail="Passwort ist falsch")
+
+    if user.totp_enabled:
+        raise HTTPException(status_code=400, detail="2FA ist bereits aktiviert")
+
+    secret = generate_secret()
+    user.totp_secret = secret
+    user.totp_last_counter = None
+    db.commit()
+
+    uri = provisioning_uri(secret, user.email)
+    return {"secret": secret, "otpauth_url": uri, "qr_svg": qr_svg(uri)}
+
+
+@router.post("/totp/enable")
+def totp_enable(
+    request: Request,
+    data: schemas.TotpEnableRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Aktiviert 2FA nach Bestätigung eines gültigen Codes aus der Authenticator-App.
+    Liefert die Recovery-Codes — sie werden genau einmal im Klartext angezeigt."""
+    if user.totp_enabled:
+        raise HTTPException(status_code=400, detail="2FA ist bereits aktiviert")
+    if not user.totp_secret:
+        raise HTTPException(status_code=400, detail="Bitte zuerst die Einrichtung starten")
+
+    result, counter = verify_totp(user.totp_secret, data.code, None)
+    if result != "ok":
+        raise HTTPException(
+            status_code=400,
+            detail="Ungültiger Code — bitte den aktuellen Code aus der App eingeben",
+        )
+
+    codes, hashes_json = generate_recovery_codes()
+    user.totp_enabled = True
+    user.totp_last_counter = counter
+    user.totp_recovery_codes = hashes_json
+    db.commit()
+
+    log_auth_event("totp_enabled", ip=get_client_ip(request), user_id=user.id, user_email=user.email)
+
+    return {
+        "message": "2FA aktiviert",
+        "recovery_codes": codes,
+    }
+
+
+@router.post("/totp/disable")
+def totp_disable(
+    request: Request,
+    data: schemas.TotpDisableRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Deaktiviert 2FA (erfordert Passwort + gültigen TOTP- oder Recovery-Code)."""
+    client_ip = get_client_ip(request)
+
+    if not user.totp_enabled:
+        raise HTTPException(status_code=400, detail="2FA ist nicht aktiviert")
+
+    if not verify_password(data.password, user.hashed_password):
+        log_auth_event(
+            "totp_disable_failed", ip=client_ip, user_id=user.id,
+            status="failure", detail="wrong_password",
+        )
+        raise HTTPException(status_code=400, detail="Passwort ist falsch")
+
+    compact = (data.code or "").strip().replace(" ", "")
+    valid = False
+    if compact.isdigit() and len(compact) == 6:
+        result, _counter = verify_totp(user.totp_secret, compact, user.totp_last_counter)
+        valid = result == "ok"
+    else:
+        valid = use_recovery_code(user.totp_recovery_codes, data.code) is not None
+
+    if not valid:
+        log_auth_event(
+            "totp_disable_failed", ip=client_ip, user_id=user.id,
+            status="failure", detail="invalid_code",
+        )
+        raise HTTPException(status_code=400, detail="Ungültiger 2FA-Code")
+
+    user.totp_secret = None
+    user.totp_enabled = False
+    user.totp_recovery_codes = None
+    user.totp_last_counter = None
+    db.commit()
+
+    log_auth_event("totp_disabled", ip=client_ip, user_id=user.id, user_email=user.email)
+
+    return {"message": "2FA deaktiviert"}
+
+
 @router.get("/users", response_model=List[schemas.UserResponse])
 def list_users(
     db: Session = Depends(get_db),
@@ -310,6 +491,19 @@ def update_user_by_admin(
         user.hashed_password = get_password_hash(data.new_password)
         # Bestehende Sessions des Benutzers invalidieren
         user.token_version = (user.token_version or 0) + 1
+
+    if data.reset_totp:
+        # 2FA-Reset (z.B. Gerät verloren): Secret + Recovery-Codes löschen und
+        # sicherheitshalber alle Sessions des Benutzers invalidieren
+        user.totp_secret = None
+        user.totp_enabled = False
+        user.totp_recovery_codes = None
+        user.totp_last_counter = None
+        user.token_version = (user.token_version or 0) + 1
+        log_auth_event(
+            "totp_reset_by_admin", ip="internal", user_id=user.id, user_email=user.email,
+            detail=f"reset_by_admin_id={admin.id}",
+        )
 
     db.commit()
     db.refresh(user)

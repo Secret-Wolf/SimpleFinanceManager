@@ -18,7 +18,10 @@ class Settings:
     SECRET_KEY: str = os.getenv("SECRET_KEY", "")
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
-    REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+    # Refresh-Token = maximale Zeit zwischen zwei App-Besuchen ohne Neu-Login.
+    # Bei jedem /api/auth/refresh werden BEIDE Tokens neu ausgestellt (Sliding Session):
+    # wer die App mindestens alle 14 Tage öffnet, bleibt dauerhaft eingeloggt.
+    REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "14"))
 
     # CORS
     ALLOWED_ORIGINS: list = os.getenv("ALLOWED_ORIGINS", "").split(",") if os.getenv("ALLOWED_ORIGINS") else []
