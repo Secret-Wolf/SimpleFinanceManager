@@ -526,6 +526,12 @@ class SyncResult(BaseModel):
     decoupled: bool = False
     challenge_image: Optional[str] = None  # data: URI for photoTAN / matrix code
     tan_mechanism_name: Optional[str] = None
+    # Decoupled-Polling-Steuerung (aus dem BPD der Bank): wann darf das Frontend
+    # frühestens (wieder) den Freigabe-Status abfragen; manual_confirm=True heißt,
+    # die Bank erlaubt kein automatisches Polling → Nutzer bestätigt per Button
+    poll_after: Optional[int] = None
+    poll_interval: Optional[int] = None
+    manual_confirm: bool = False
 
 
 # Import Schemas

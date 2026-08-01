@@ -60,7 +60,8 @@ def _purge_expired():
 
 
 def _store_pending(*, user_id: int, connection_id: int, pin: str, client_data: bytes,
-                   dialog_data: bytes, tan_data: bytes, from_date: date) -> str:
+                   dialog_data: bytes, tan_data: bytes, from_date: date,
+                   decoupled: bool = False, poll: Optional[dict] = None) -> str:
     token = secrets.token_urlsafe(24)
     with _pending_lock:
         _purge_expired()
@@ -72,6 +73,12 @@ def _store_pending(*, user_id: int, connection_id: int, pin: str, client_data: b
             "dialog_data": dialog_data,
             "tan_data": tan_data,
             "from_date": from_date,
+            # Decoupled-Polling-Zustand (BPD-Wartezeiten der Bank, Zählerstand)
+            "decoupled": decoupled,
+            "poll": poll or {},
+            "polls_done": 0,
+            "in_flight": False,
+            "last_payload": None,
             "expires": time.time() + _PENDING_TTL,
         }
     return token
@@ -316,7 +323,47 @@ def _load_system_data(connection: BankConnection) -> Optional[bytes]:
         return None
 
 
-def _tan_payload(need: NeedTANResponse, token: str) -> dict:
+def _decoupled_params(client: FinTS3PinTanClient) -> dict:
+    """Liest die Decoupled-Polling-Vorgaben der Bank aus dem BPD (HITANS7):
+    Wartezeit vor der ersten/nächsten Statusabfrage, max. Anzahl Abfragen und ob
+    automatisches Polling überhaupt erlaubt ist. Wer schneller/öfter pollt als
+    erlaubt, riskiert einen Abbruch des Freigabevorgangs (z.B. Atruvia → 9010)."""
+    params = {"first_wait": 3, "interval": 3, "max_polls": 60, "automated": True}
+    try:
+        mechanisms = client.get_tan_mechanisms()
+        mech = mechanisms.get(str(client.selected_security_function))
+        if mech is None and mechanisms:
+            mech = next(iter(mechanisms.values()))
+        if mech is not None:
+            first = getattr(mech, "wait_before_first_poll", None)
+            nxt = getattr(mech, "wait_before_next_poll", None)
+            maxp = getattr(mech, "decoupled_max_poll_number", None)
+            auto = getattr(mech, "automated_polling_allowed", None)
+            if first:
+                params["first_wait"] = max(1, int(first))
+            if nxt:
+                params["interval"] = max(2, int(nxt))
+            if maxp:
+                params["max_polls"] = max(1, int(maxp))
+            if auto is not None:
+                params["automated"] = bool(auto)
+    except Exception as e:  # BPD unvollständig o.ä. — konservative Defaults verwenden
+        logger.info("Decoupled-Parameter nicht lesbar (%s) — Defaults aktiv", e)
+    return params
+
+
+def _restore_decoupled_flag(need_obj, decoupled: bool):
+    """python-fints 5.0.0 verliert das decoupled-Flag bei get_data()/from_data():
+    _from_data_v1 rekonstruiert NeedTANResponse immer mit decoupled=False. Ohne
+    Korrektur schickt send_tan dann HKTAN-Prozess '2' (TAN-Einreichung mit leerer
+    TAN) statt 'S' (Statusabfrage) — Atruvia bricht den Vorgang damit ab (9010)."""
+    if decoupled and getattr(need_obj, "decoupled", None) is not True:
+        need_obj.decoupled = True
+    return need_obj
+
+
+def _tan_payload(need: NeedTANResponse, token: str, poll: Optional[dict] = None,
+                 poll_after: Optional[int] = None) -> dict:
     """Build the API payload describing a required TAN."""
     challenge_image = None
     try:
@@ -326,15 +373,21 @@ def _tan_payload(need: NeedTANResponse, token: str) -> dict:
     except Exception:
         challenge_image = None
 
-    return {
+    decoupled = bool(getattr(need, "decoupled", False))
+    payload = {
         "status": "tan_required",
         "job_id": token,
         "challenge": (getattr(need, "challenge", None) or "").strip() or
-                     ("Bitte die Aktion in deiner Banking-App bestätigen." if getattr(need, "decoupled", False)
+                     ("Bitte die Aktion in deiner Banking-App bestätigen." if decoupled
                       else "Bitte TAN eingeben."),
-        "decoupled": bool(getattr(need, "decoupled", False)),
+        "decoupled": decoupled,
         "challenge_image": challenge_image,
     }
+    if decoupled and poll:
+        payload["poll_after"] = poll_after if poll_after is not None else poll.get("first_wait", 3)
+        payload["poll_interval"] = poll.get("interval", 3)
+        payload["manual_confirm"] = not poll.get("automated", True)
+    return payload
 
 
 # --- Diagnostics: capture the bank's FinTS return codes (incl. internal sends) -----
@@ -401,12 +454,21 @@ def start_sync(db: Session, connection: BankConnection, pin: str, from_date: Opt
         _save_system_data(db, connection, client_data)
 
         if need is not None:
+            decoupled = bool(getattr(need, "decoupled", False))
+            poll = _decoupled_params(client) if decoupled else {}
             token = _store_pending(
                 user_id=connection.user_id, connection_id=connection.id, pin=pin,
                 client_data=client_data, dialog_data=dialog_data,
                 tan_data=need.get_data(), from_date=from_date,
+                decoupled=decoupled, poll=poll,
             )
-            return _tan_payload(need, token)
+            payload = _tan_payload(need, token, poll=poll)
+            with _pending_lock:
+                if token in _pending:
+                    # Erste Statusabfrage frühestens nach der Bank-Wartezeit
+                    _pending[token]["not_before"] = time.time() + poll.get("first_wait", 3) if decoupled else 0
+                    _pending[token]["last_payload"] = dict(payload)
+            return payload
 
         _, statements = payload
         result = _import_statements(db, connection, statements, connection.user_id)
@@ -423,29 +485,61 @@ def start_sync(db: Session, connection: BankConnection, pin: str, from_date: Opt
 
 
 def resume_sync(db: Session, connection: BankConnection, token: str, tan: Optional[str]) -> dict:
-    """Resume a paused sync after the user provided a TAN (or for decoupled polling)."""
+    """Resume a paused sync after the user provided a TAN (or for decoupled polling).
+
+    Decoupled (App-Freigabe): pro Aufruf genau EINE Statusabfrage bei der Bank,
+    und nur im von der Bank vorgegebenen Takt (BPD-Wartezeiten). Zu frühe oder
+    parallele Polls werden ohne Bank-Kontakt beantwortet."""
     pending = _get_pending(token, connection.user_id)
     if not pending:
         raise BankingError("TAN-Vorgang abgelaufen oder ungültig. Bitte erneut abrufen.")
 
-    client = _build_client(connection, pending["pin"], from_data=pending["client_data"])
-    codes = _attach_code_recorder(client)
-    need_obj = NeedRetryResponse.from_data(pending["tan_data"])
+    decoupled = bool(pending.get("decoupled"))
+    poll = pending.get("poll") or {}
 
+    if decoupled:
+        with _pending_lock:
+            p = _pending.get(token)
+            if not p:
+                raise BankingError("TAN-Vorgang abgelaufen oder ungültig. Bitte erneut abrufen.")
+            # Paralleler Poll läuft schon → letzten Stand zurückgeben, Bank nicht anfassen
+            if p.get("in_flight") and p.get("last_payload"):
+                payload = dict(p["last_payload"])
+                payload["poll_after"] = poll.get("interval", 3)
+                return payload
+            # Zu früh (Bank-Wartezeit läuft noch) → ohne Bank-Kontakt vertrösten
+            remaining = p.get("not_before", 0) - time.time()
+            if remaining > 1.5 and p.get("last_payload"):
+                payload = dict(p["last_payload"])
+                payload["poll_after"] = max(1, int(remaining + 0.999))
+                return payload
+            # Maximale Anzahl Statusabfragen der Bank respektieren
+            if p.get("polls_done", 0) >= poll.get("max_polls", 60):
+                _pending.pop(token, None)
+                raise BankingError(
+                    "Freigabe nicht innerhalb der erlaubten Wartezeit bestätigt – "
+                    "bitte die Umsätze erneut abrufen."
+                )
+            p["in_flight"] = True
+        # Rest der Wartezeit (≤1.5s) kurz aussitzen statt einen Roundtrip zu verschwenden
+        remaining = pending.get("not_before", 0) - time.time()
+        if 0 < remaining <= 1.5:
+            time.sleep(remaining)
+
+    codes: list = []
     try:
+        client = _build_client(connection, pending["pin"], from_data=pending["client_data"])
+        codes = _attach_code_recorder(client)
+        # python-fints 5.0.0 verliert das decoupled-Flag beim Serialisieren → restaurieren,
+        # sonst geht statt der Statusabfrage (Prozess 'S') eine leere TAN (Prozess '2') raus
+        need_obj = _restore_decoupled_flag(NeedRetryResponse.from_data(pending["tan_data"]), decoupled)
+
         still_need = None
         dialog_data = None
         collected = None
 
         with client.resume_dialog(pending["dialog_data"]):
             resp = client.send_tan(need_obj, tan or "")
-
-            # Decoupled: poll a few times within this dialog before handing control back
-            polls = 0
-            while isinstance(resp, NeedTANResponse) and getattr(resp, "decoupled", False) and polls < 3:
-                time.sleep(3)
-                resp = client.send_tan(resp, "")
-                polls += 1
 
             if isinstance(resp, NeedTANResponse) and getattr(resp, "decoupled", False):
                 still_need = resp
@@ -464,15 +558,21 @@ def resume_sync(db: Session, connection: BankConnection, token: str, tan: Option
 
         if still_need is not None:
             # Update the pending entry for the next poll request (reuse the same token)
+            payload = _tan_payload(still_need, token, poll=poll,
+                                   poll_after=poll.get("interval", 3))
             with _pending_lock:
                 if token in _pending:
                     _pending[token].update({
                         "client_data": client_data,
                         "dialog_data": dialog_data,
                         "tan_data": still_need.get_data(),
+                        "polls_done": pending.get("polls_done", 0) + 1,
+                        "not_before": time.time() + poll.get("interval", 3),
+                        "last_payload": dict(payload),
+                        "in_flight": False,
                         "expires": time.time() + _PENDING_TTL,
                     })
-            return _tan_payload(still_need, token)
+            return payload
 
         _drop_pending(token)
         _, statements = collected
@@ -487,10 +587,14 @@ def resume_sync(db: Session, connection: BankConnection, token: str, tan: Option
         logger.warning("FinTS resume_sync failed for connection %s: %s | bank codes: %s",
                        connection.id, e, _format_codes(codes))
         _drop_pending(token)
-        raise BankingError(_friendly_error(e, codes)) from e
+        raise BankingError(_friendly_error(e, codes, context="resume")) from e
+    finally:
+        with _pending_lock:
+            if token in _pending:
+                _pending[token]["in_flight"] = False
 
 
-def _friendly_error(e: Exception, codes: Optional[list] = None) -> str:
+def _friendly_error(e: Exception, codes: Optional[list] = None, context: str = "start") -> str:
     msg = str(e) or e.__class__.__name__
     low = msg.lower()
     code_set = {c for c, _ in (codes or [])}
@@ -498,6 +602,12 @@ def _friendly_error(e: Exception, codes: Optional[list] = None) -> str:
     if "connection" in low or "timed out" in low or "name or service" in low or "getaddrinfo" in low:
         return "Bankserver nicht erreichbar – FinTS-URL prüfen."
     if "9010" in code_set:
+        if context == "resume":
+            # Mitten im TAN-/Freigabevorgang bedeutet 9010 NICHT "falsche URL",
+            # sondern dass die Bank den laufenden Vorgang abgebrochen/abgelehnt hat
+            return ("Die Bank hat den Freigabe-Vorgang abgebrochen (Code 9010). "
+                    "Bitte die Umsätze erneut abrufen und die Freigabe in der App zeitnah bestätigen. "
+                    f"Bank-Meldung: {_format_codes(codes)}")
         return "Falsche Bank/FinTS-URL für diese BLZ (BPD-Fehler 9010) – URL prüfen (ggf. fints1 vs. fints2.atruvia.de)."
     if code_set & {"9078", "9079"}:
         return ("Die Bank verlangt eine registrierte FinTS-Produkt-ID (Code 9078). Bitte eine kostenlose "

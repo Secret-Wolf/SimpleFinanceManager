@@ -1,7 +1,7 @@
 // Online Banking (FinTS) Module
 
 // Transient state for the current TAN flow (never persisted)
-let _tanFlow = { connectionId: null, jobId: null, decoupled: false };
+let _tanFlow = { connectionId: null, jobId: null, decoupled: false, manualConfirm: false, pollIntervalMs: 3000 };
 let _lastUrlSuggestion = '';
 let _bankSuggestions = [];  // last bank-search results (for index-based selection)
 
@@ -270,7 +270,15 @@ function showSyncDone(result) {
 // --- TAN handling ------------------------------------------------------------
 
 function openTanModal(result, connectionId) {
-    _tanFlow = { connectionId, jobId: result.job_id, decoupled: !!result.decoupled };
+    _tanFlow = {
+        connectionId,
+        jobId: result.job_id,
+        decoupled: !!result.decoupled,
+        manualConfirm: !!result.manual_confirm,
+        // Poll-Takt kommt aus dem BPD der Bank (Server liefert ihn mit) —
+        // schneller zu pollen als erlaubt lässt die Bank den Vorgang abbrechen
+        pollIntervalMs: Math.max(2, result.poll_interval || 3) * 1000
+    };
 
     document.getElementById('bank-tan-connection-id').value = connectionId;
     document.getElementById('bank-tan-job-id').value = result.job_id;
@@ -294,15 +302,27 @@ function openTanModal(result, connectionId) {
     const submitBtn = document.getElementById('bank-tan-submit-btn');
 
     if (_tanFlow.decoupled) {
-        // Approve-in-app: no TAN to type, poll for confirmation
+        // Approve-in-app: keine TAN-Eingabe
         inputGroup.classList.add('hidden');
-        submitBtn.classList.add('hidden');
-        document.getElementById('bank-tan-status').textContent = 'Warte auf Freigabe in der Banking-App...';
-        openModal('bank-tan-modal');
-        pollDecoupledTan();
+        if (_tanFlow.manualConfirm) {
+            // Bank erlaubt kein automatisches Polling → Nutzer bestätigt selbst
+            submitBtn.classList.remove('hidden');
+            submitBtn.textContent = 'Ich habe in der App bestätigt';
+            document.getElementById('bank-tan-status').textContent =
+                'Bitte in der Banking-App freigeben und danach hier bestätigen.';
+            openModal('bank-tan-modal');
+        } else {
+            submitBtn.classList.add('hidden');
+            document.getElementById('bank-tan-status').textContent = 'Warte auf Freigabe in der Banking-App...';
+            openModal('bank-tan-modal');
+            // Erste Statusabfrage erst nach der Bank-Wartezeit
+            const firstDelay = Math.max(1, result.poll_after || 3) * 1000;
+            setTimeout(pollDecoupledTan, firstDelay);
+        }
     } else {
         inputGroup.classList.remove('hidden');
         submitBtn.classList.remove('hidden');
+        submitBtn.textContent = 'Bestätigen';
         openModal('bank-tan-modal');
         setTimeout(() => document.getElementById('bank-tan-input').focus(), 100);
     }
@@ -313,15 +333,17 @@ async function confirmBankTan() {
     const btn = document.getElementById('bank-tan-submit-btn');
     if (btn && btn.disabled) return;
 
-    const tan = document.getElementById('bank-tan-input').value.trim();
+    const decoupled = _tanFlow.decoupled;
+    const tan = decoupled ? null : document.getElementById('bank-tan-input').value.trim();
     const errorEl = document.getElementById('bank-tan-error');
     errorEl.textContent = '';
 
-    if (!tan) {
+    if (!decoupled && !tan) {
         errorEl.textContent = 'Bitte TAN eingeben.';
         return;
     }
 
+    const idleLabel = decoupled ? 'Ich habe in der App bestätigt' : 'Bestätigen';
     btn.disabled = true;
     btn.textContent = 'Prüfe...';
 
@@ -331,8 +353,13 @@ async function confirmBankTan() {
             closeModal('bank-tan-modal');
             showSyncDone(result);
         } else if (result.status === 'tan_required') {
-            // e.g. switched to decoupled confirmation
-            openTanModal(result, _tanFlow.connectionId);
+            if (decoupled) {
+                // Manuelle Bestätigung: Bank meldet noch keine Freigabe
+                errorEl.textContent = 'Noch keine Freigabe angekommen – bitte kurz warten und erneut bestätigen.';
+            } else {
+                // e.g. switched to decoupled confirmation
+                openTanModal(result, _tanFlow.connectionId);
+            }
         } else {
             errorEl.textContent = result.message || 'TAN fehlgeschlagen';
         }
@@ -340,7 +367,7 @@ async function confirmBankTan() {
         errorEl.textContent = error.message;
     } finally {
         btn.disabled = false;
-        btn.textContent = 'Bestätigen';
+        btn.textContent = idleLabel;
     }
 }
 
@@ -365,9 +392,16 @@ async function pollDecoupledTan() {
             document.getElementById('bank-tan-status').textContent = '';
             return;
         }
-        // still tan_required -> keep waiting (guard against stale job after re-open)
+        // still tan_required -> keep waiting (guard against stale job after re-open).
+        // Takt: Server sagt, wann die nächste Abfrage frühestens erlaubt ist.
+        if (result.poll_interval) {
+            _tanFlow.pollIntervalMs = Math.max(2, result.poll_interval) * 1000;
+        }
+        const nextDelay = result.poll_after
+            ? Math.max(1, result.poll_after) * 1000
+            : _tanFlow.pollIntervalMs;
         if (_tanFlow.jobId === jobId && modal.classList.contains('active')) {
-            setTimeout(pollDecoupledTan, 3000);
+            setTimeout(pollDecoupledTan, nextDelay);
         }
     } catch (error) {
         document.getElementById('bank-tan-error').textContent = error.message;
