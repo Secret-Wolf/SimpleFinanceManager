@@ -110,7 +110,9 @@ def submit_tan(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Submit a TAN (or poll a decoupled approval) to finish a paused sync."""
+    """Submit a TAN (or poll a decoupled approval) to finish a running sync.
+    Polling here only reads the background job's state — it never talks to the bank,
+    so repeated calls can't trigger additional approval requests."""
     conn = _get_owned_connection(connection_id, current_user, db)
     try:
         result = fints_service.resume_sync(db, conn, data.job_id, data.tan)
@@ -121,3 +123,16 @@ def submit_tan(
         log_data_event("fints_sync", user_id=current_user.id, resource="bank_connection",
                        resource_id=conn.id, detail=f"new={result.get('imported')} dup={result.get('duplicates')}")
     return schemas.SyncResult(**result)
+
+
+@router.post("/connections/{connection_id}/cancel")
+def cancel_sync(
+    connection_id: int,
+    data: schemas.CancelRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Abort a running sync (user closed the dialog) so no further bank calls happen."""
+    _get_owned_connection(connection_id, current_user, db)
+    cancelled = fints_service.cancel_sync(data.job_id, current_user.id)
+    return {"cancelled": cancelled}

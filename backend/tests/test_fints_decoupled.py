@@ -1,19 +1,24 @@
-"""Decoupled-TAN-Fixes: decoupled-Flag-Restaurierung, BPD-Poll-Parameter, Payload-Hints.
+"""Decoupled-TAN (App-Freigabe): Job-Modell, Poll-Parameter, Fehlermeldungen.
 
-Hintergrund: python-fints 5.0.0 verliert das decoupled-Flag bei
-NeedTANResponse.get_data()/from_data() — ohne Restaurierung geht beim Poll
-HKTAN-Prozess '2' (leere TAN) statt 'S' (Statusabfrage) raus und Atruvia
-bricht den Freigabevorgang mit 9010 ab.
+Hintergrund: Der Abruf läuft in einem Hintergrund-Thread, der das FinTS-Client-
+Objekt bis zum Schluss am Leben hält. Grund: python-fints hält Auftragszustände
+(Closures) im RAM des Clients — über HTTP-Requests hinweg gehen die verloren, und
+ein Neuabruf nach der Freigabe würde bei Banken mit auftragsbezogener SCA jedes
+Mal eine NEUE Freigabe auslösen (Push-Flut beim Nutzer).
 """
 
+import time
+from decimal import Decimal
 from types import SimpleNamespace
 
+import pytest
+
+from app.services import fints_service as fs
 from app.services.fints_service import (
-    _NEUTRAL_RESUME,
+    BankingError,
     _decoupled_params,
     _friendly_error,
-    _neutralize_resume_method,
-    _restore_decoupled_flag,
+    _normalize_transactions,
     _tan_payload,
 )
 
@@ -27,6 +32,18 @@ class _FakeClient(SimpleNamespace):
         return self._mechanisms
 
 
+@pytest.fixture(autouse=True)
+def _clean_jobs():
+    """Job-Store zwischen den Tests leeren (RAM-global)."""
+    with fs._jobs_lock:
+        fs._jobs.clear()
+    yield
+    with fs._jobs_lock:
+        fs._jobs.clear()
+
+
+# --- BPD-Poll-Parameter -------------------------------------------------------
+
 def test_decoupled_params_reads_bpd_values():
     client = _FakeClient(
         selected_security_function="921",
@@ -39,18 +56,16 @@ def test_decoupled_params_reads_bpd_values():
             )
         },
     )
-    params = _decoupled_params(client)
-    assert params == {"first_wait": 5, "interval": 2, "max_polls": 10, "automated": True}
+    assert _decoupled_params(client) == {
+        "first_wait": 5, "interval": 2, "max_polls": 10, "automated": True}
 
 
 def test_decoupled_params_defaults_when_missing():
-    # Mechanismus ohne Decoupled-Felder (z.B. HITANS6) -> konservative Defaults
     client = _FakeClient(selected_security_function="911",
                          _mechanisms={"911": _FakeMech(name="TAN-Verfahren")})
-    params = _decoupled_params(client)
-    assert params == {"first_wait": 3, "interval": 3, "max_polls": 60, "automated": True}
+    assert _decoupled_params(client) == {
+        "first_wait": 3, "interval": 3, "max_polls": 60, "automated": True}
 
-    # get_tan_mechanisms wirft -> Defaults statt Absturz
     class _Broken:
         selected_security_function = "x"
 
@@ -60,111 +75,150 @@ def test_decoupled_params_defaults_when_missing():
     assert _decoupled_params(_Broken())["interval"] == 3
 
 
-def test_decoupled_params_manual_confirm():
-    client = _FakeClient(
-        selected_security_function="922",
-        _mechanisms={"922": _FakeMech(automated_polling_allowed=False,
-                                      wait_before_first_poll=3,
-                                      wait_before_next_poll=3)},
-    )
-    assert _decoupled_params(client)["automated"] is False
+# --- Job-Store & Status-Abfrage ----------------------------------------------
+
+def test_job_lifecycle_and_user_isolation():
+    token = fs._new_job(user_id=1, connection_id=7)
+
+    assert fs._get_job(token, 1)["status"] == "running"
+    assert fs._get_job(token, 2) is None, "fremder Nutzer darf den Job nicht sehen"
+
+    fs._set_job(token, "done", {"status": "done", "imported": 3})
+    assert fs._get_job(token, 1)["payload"]["imported"] == 3
+
+    fs._drop_job(token)
+    assert fs._get_job(token, 1) is None
 
 
-def test_restore_decoupled_flag():
-    # from_data liefert decoupled=False (Bibliotheks-Bug) -> restaurieren
-    need = SimpleNamespace(decoupled=False)
-    assert _restore_decoupled_flag(need, True).decoupled is True
-    # Nicht-decoupled Vorgänge bleiben unangetastet
-    need2 = SimpleNamespace(decoupled=False)
-    assert _restore_decoupled_flag(need2, False).decoupled is False
+def test_wait_for_job_state_returns_terminal_payload_and_clears_job():
+    token = fs._new_job(user_id=1, connection_id=1)
+    fs._set_job(token, "done", {"status": "done", "imported": 5, "duplicates": 2})
+
+    result = fs._wait_for_job_state(token, timeout=1)
+    assert result["status"] == "done"
+    assert result["imported"] == 5
+    # Terminalzustand wurde abgeholt -> Job (und damit die PIN) ist weg
+    assert fs._get_job(token, 1) is None
 
 
-def test_tan_payload_contains_poll_hints():
+def test_wait_for_job_state_reports_tan_required_without_clearing():
+    token = fs._new_job(user_id=1, connection_id=1)
+    fs._set_job(token, "tan_required", {"status": "tan_required", "job_id": token,
+                                        "decoupled": True, "challenge": "Bitte freigeben"})
+
+    result = fs._wait_for_job_state(token, timeout=1)
+    assert result["status"] == "tan_required"
+    # Job muss bestehen bleiben, der Worker arbeitet weiter
+    assert fs._get_job(token, 1) is not None
+
+
+def test_wait_for_job_state_keeps_frontend_polling_while_running():
+    """Noch kein Ergebnis: Das Frontend bekommt einen Warte-Zustand, keinen Fehler."""
+    token = fs._new_job(user_id=1, connection_id=1)
+    result = fs._wait_for_job_state(token, timeout=0.5)
+    assert result["status"] == "tan_required"
+    assert result["poll_after"] >= 1
+
+
+def test_cancel_sync_marks_job_and_wakes_waiter():
+    token = fs._new_job(user_id=1, connection_id=1)
+
+    assert fs.cancel_sync(token, user_id=2) is False, "fremder Nutzer darf nicht abbrechen"
+    assert fs.cancel_sync(token, user_id=1) is True
+    assert fs._job_cancelled(token) is True
+    # Ein im TAN-Eingabe-Wait hängender Worker wird geweckt
+    assert fs._jobs[token]["tan_event"].is_set()
+
+
+def test_job_expiry_purges_pin():
+    token = fs._new_job(user_id=1, connection_id=1)
+    with fs._jobs_lock:
+        fs._jobs[token]["expires"] = time.time() - 1
+    assert fs._get_job(token, 1) is None
+    assert token not in fs._jobs
+
+
+def test_wait_for_tan_input_raises_when_cancelled():
+    token = fs._new_job(user_id=1, connection_id=1)
+    fs.cancel_sync(token, user_id=1)
+    with pytest.raises(BankingError, match="abgebrochen"):
+        fs._wait_for_tan_input(token)
+
+
+# --- Payload ------------------------------------------------------------------
+
+def test_tan_payload_poll_hints_are_frontend_paced():
+    """Das Frontend pollt nur unseren Job-Status (kein Bank-Kontakt) — daher ein
+    kurzer, fixer Takt; die BPD-Wartezeiten hält der Worker-Thread ein."""
     need = SimpleNamespace(challenge="Bitte in der App bestätigen",
                            challenge_matrix=None, decoupled=True)
-    poll = {"first_wait": 5, "interval": 2, "max_polls": 10, "automated": True}
+    poll = {"first_wait": 30, "interval": 20, "max_polls": 10, "automated": True}
 
     payload = _tan_payload(need, "tok", poll=poll)
     assert payload["decoupled"] is True
-    assert payload["poll_after"] == 5
+    assert payload["poll_after"] == 2
     assert payload["poll_interval"] == 2
     assert payload["manual_confirm"] is False
 
-    # Folge-Polls: poll_after = Intervall
-    payload = _tan_payload(need, "tok", poll=poll, poll_after=2)
-    assert payload["poll_after"] == 2
-
-    # Kein automatisches Polling erlaubt -> manueller Bestätigen-Modus
-    poll_manual = {**poll, "automated": False}
-    assert _tan_payload(need, "tok", poll=poll_manual)["manual_confirm"] is True
-
-    # Nicht-decoupled: keine Poll-Felder
+    # Nicht-decoupled (TAN-Eingabe): keine Poll-Felder
     need_tan = SimpleNamespace(challenge="TAN eingeben", challenge_matrix=None, decoupled=False)
-    payload = _tan_payload(need_tan, "tok", poll=poll)
-    assert "poll_after" not in payload
+    assert "poll_after" not in _tan_payload(need_tan, "tok", poll=poll)
 
+
+# --- Ergebnis-Aufbereitung ----------------------------------------------------
+
+def test_normalize_transactions_passes_through_mt940_list():
+    """MT940-Pfad liefert bereits fertige Transaktionen — unverändert lassen."""
+    txs = [SimpleNamespace(data={"amount": 1}), SimpleNamespace(data={"amount": 2})]
+    assert _normalize_transactions(txs) is txs
+    assert _normalize_transactions([]) == []
+
+
+def test_normalize_transactions_parses_camt_streams():
+    """Nach einer TAN liefert der CAMT-Pfad rohe (booked, pending)-Streams —
+    die muss unser Code parsen, weil get_transactions() übersprungen wurde."""
+    camt = b"""<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.052.001.02"><BkToCstmrAcctRpt><Rpt>
+<Id>TEST</Id><Acct><Id><IBAN>DE02120300000000202051</IBAN></Id><Ccy>EUR</Ccy></Acct>
+<Ntry><Amt Ccy="EUR">12.34</Amt><CdtDbtInd>DBIT</CdtDbtInd><Sts>BOOK</Sts>
+<BookgDt><Dt>2026-06-01</Dt></BookgDt><ValDt><Dt>2026-06-01</Dt></ValDt>
+<NtryDtls><TxDtls><RmtInf><Ustrd>Testbuchung</Ustrd></RmtInf></TxDtls></NtryDtls>
+</Ntry></Rpt></BkToCstmrAcctRpt></Document>"""
+
+    result = _normalize_transactions(([camt], []))
+    assert isinstance(result, list)
+    assert len(result) == 1
+    # DBIT -> negativer Betrag; Decimal bleibt erhalten (nie float!)
+    assert result[0].data["amount"].amount == Decimal("-12.34")
+    assert result[0].data["date"].isoformat() == "2026-06-01"
+
+
+# --- Fehlermeldungen ----------------------------------------------------------
 
 def test_friendly_error_9010_context():
     codes = [("9010", "Der Auftrag wurde abgelehnt")]
-    # Beim Verbindungsaufbau: URL-Hinweis
     assert "URL" in _friendly_error(Exception("x"), codes, context="start")
-    # Mitten im Freigabevorgang: KEIN irreführender URL-Hinweis, sondern Abbruch-Meldung
+
     resume_msg = _friendly_error(Exception("x"), codes, context="resume")
     assert "URL" not in resume_msg
     assert "erneut abrufen" in resume_msg
     assert "9010" in resume_msg
 
 
-def test_friendly_error_pin_message_never_blames_pin_during_approval():
-    """python-fints wirft FinTSClientPINError für JEDEN 9xxx-Code. Im Freigabeschritt
-    ist die PIN aber nachweislich korrekt (die Bank hat die Freigabe angefordert) —
-    die Meldung darf den Nutzer nicht auf eine falsche Fährte schicken."""
+def test_friendly_error_never_blames_pin_during_approval():
+    """python-fints wirft FinTSClientPINError für JEDEN 9xxx-Code. Im Freigabe-
+    schritt ist die PIN nachweislich korrekt (die Bank hat ja die Freigabe
+    angefordert) — die Meldung darf nicht auf die falsche Fährte führen."""
     exc = Exception("Error during dialog initialization, PIN wrong?")
     codes = [("9955", "Vorgang abgebrochen")]
 
     resume_msg = _friendly_error(exc, codes, context="resume")
     assert "PIN war korrekt" in resume_msg
-    assert "9955" in resume_msg  # echte Bank-Meldung sichtbar
+    assert "9955" in resume_msg
 
-    # Beim Login selbst bleibt der PIN-Hinweis richtig — jetzt mit Bank-Codes
     start_msg = _friendly_error(exc, codes, context="start")
     assert "PIN oder Zugangsdaten falsch" in start_msg
     assert "9955" in start_msg
-
-
-def test_neutralize_resume_method_prevents_touchdown_crash():
-    """Löst der Umsatzabruf die SCA aus, merkt sich python-fints
-    '_continue_fetch_with_touchdowns' als Fortsetzung. Diese Methode braucht
-    Client-RAM-Zustand (_touchdown_args & Closures), der den Request-Wechsel
-    nicht überlebt -> AttributeError, obwohl die Bank bereits freigegeben hat."""
-    fresh_client = SimpleNamespace()  # neuer Client: kein _touchdown_args
-    need = SimpleNamespace(resume_method="_continue_fetch_with_touchdowns")
-
-    assert _neutralize_resume_method(need, fresh_client) is True
-    assert need.resume_method == _NEUTRAL_RESUME
-
-    # Gleicher Client (Zustand vorhanden) -> unangetastet weiterlaufen lassen
-    same_client = SimpleNamespace(_touchdown_args=("HIKAZ",))
-    need2 = SimpleNamespace(resume_method="_continue_fetch_with_touchdowns")
-    assert _neutralize_resume_method(need2, same_client) is False
-    assert need2.resume_method == "_continue_fetch_with_touchdowns"
-
-    # Login-SCA ist ohnehin zustandslos -> nichts zu tun
-    need3 = SimpleNamespace(resume_method="_continue_dialog_initialization")
-    assert _neutralize_resume_method(need3, fresh_client) is False
-    assert need3.resume_method == "_continue_dialog_initialization"
-
-
-def test_neutral_resume_method_exists_and_passes_response_through():
-    """Die Ersatz-Fortsetzung muss es in python-fints geben und die Bank-Antwort
-    unverändert zurückgeben (wir sammeln danach selbst frisch ein)."""
-    from fints.client import FinTS3Client
-
-    method = getattr(FinTS3Client, _NEUTRAL_RESUME, None)
-    assert callable(method), f"{_NEUTRAL_RESUME} fehlt in python-fints"
-
-    sentinel = object()
-    assert method(None, "command_seg", sentinel) is sentinel
 
 
 def test_hktan_version_helper():

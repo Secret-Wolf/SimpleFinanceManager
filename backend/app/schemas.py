@@ -513,6 +513,10 @@ class TanRequest(BaseModel):
     tan: Optional[str] = None  # empty/None for decoupled (approve-in-app) methods
 
 
+class CancelRequest(BaseModel):
+    job_id: str
+
+
 class SyncResult(BaseModel):
     status: str  # "done" | "tan_required" | "error"
     # status == "done"

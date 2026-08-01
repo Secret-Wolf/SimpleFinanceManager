@@ -21,11 +21,14 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import List, Optional
 
-from fints.client import FinTS3PinTanClient, NeedRetryResponse, NeedTANResponse
+from fints.camt_parser import camt053_to_dict
+from fints.client import FinTS3PinTanClient, NeedTANResponse
+from fints.models import Transaction as FinTSTransaction
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import settings
+from ..database import SessionLocal
 from ..models import BankConnection, Import, Transaction
 from .categorizer import apply_rules_to_uncategorized
 from .csv_parser import ensure_account_exists, generate_import_hash
@@ -46,60 +49,76 @@ class BankingError(Exception):
     """User-facing banking error with a clean German message."""
 
 
-# --- Transient pending-TAN store (RAM only, never written to disk) -------------
+# --- Hintergrund-Sync-Jobs (RAM only, never written to disk) -------------------
+#
+# Warum ein Hintergrund-Thread statt eines request-übergreifenden Zustands:
+# python-fints hält für einen laufenden Auftrag nicht-serialisierbare Zustände
+# (Closures für Blättern und Ergebnisaufbereitung, siehe `_touchdown_*`). Über
+# HTTP-Requests hinweg gehen die verloren. Ein Neuabruf nach der Freigabe ist
+# keine Alternative: Banken mit auftragsbezogener SCA (Atruvia/Volksbank)
+# verlangen dann für JEDEN Abruf eine neue Freigabe — der Nutzer wird mit
+# Push-Nachrichten überflutet. Im Thread lebt das Client-Objekt bis zum Schluss,
+# damit reicht **genau eine** Freigabe pro Abruf.
+#
+# Die PIN liegt weiterhin nur im RAM (Job-Eintrag) und verschwindet mit dem Job.
 
-_PENDING_TTL = 300  # seconds
-# Wie oft darf die Bank innerhalb eines Abrufs eine weitere Freigabe verlangen
-# (Login-SCA, danach ggf. SCA für den Umsatzabruf) bevor wir abbrechen
-_MAX_COLLECT_ROUNDS = 3
-_pending: dict = {}
-_pending_lock = threading.Lock()
+_JOB_TTL = 900  # seconds
+_TAN_INPUT_TIMEOUT = 300  # wie lange ein Job auf eine eingegebene TAN wartet
+
+_jobs: dict = {}
+_jobs_lock = threading.Lock()
 
 
 def _purge_expired():
     now = time.time()
-    for token in [t for t, p in _pending.items() if p["expires"] < now]:
-        _pending.pop(token, None)
+    for token in [t for t, j in _jobs.items() if j["expires"] < now]:
+        _jobs.pop(token, None)
 
 
-def _store_pending(*, user_id: int, connection_id: int, pin: str, client_data: bytes,
-                   dialog_data: bytes, tan_data: bytes, from_date: date,
-                   decoupled: bool = False, poll: Optional[dict] = None) -> str:
+def _new_job(user_id: int, connection_id: int) -> str:
     token = secrets.token_urlsafe(24)
-    with _pending_lock:
+    with _jobs_lock:
         _purge_expired()
-        _pending[token] = {
+        _jobs[token] = {
             "user_id": user_id,
             "connection_id": connection_id,
-            "pin": pin,
-            "client_data": client_data,
-            "dialog_data": dialog_data,
-            "tan_data": tan_data,
-            "from_date": from_date,
-            # Decoupled-Polling-Zustand (BPD-Wartezeiten der Bank, Zählerstand)
-            "decoupled": decoupled,
-            "poll": poll or {},
-            "polls_done": 0,
-            "collect_rounds": 0,
-            "in_flight": False,
-            "last_payload": None,
-            "expires": time.time() + _PENDING_TTL,
+            "status": "running",          # running | tan_required | done | error
+            "payload": {},
+            "tan_event": threading.Event(),
+            "tan_value": None,
+            "cancelled": False,
+            "expires": time.time() + _JOB_TTL,
         }
     return token
 
 
-def _get_pending(token: str, user_id: int) -> Optional[dict]:
-    with _pending_lock:
+def _set_job(token: str, status: str, payload: dict):
+    with _jobs_lock:
+        job = _jobs.get(token)
+        if job:
+            job["status"] = status
+            job["payload"] = payload
+            job["expires"] = time.time() + _JOB_TTL
+
+
+def _get_job(token: str, user_id: int) -> Optional[dict]:
+    with _jobs_lock:
         _purge_expired()
-        p = _pending.get(token)
-        if not p or p["user_id"] != user_id:
+        job = _jobs.get(token)
+        if not job or job["user_id"] != user_id:
             return None
-        return p
+        return job
 
 
-def _drop_pending(token: str):
-    with _pending_lock:
-        _pending.pop(token, None)
+def _job_cancelled(token: str) -> bool:
+    with _jobs_lock:
+        job = _jobs.get(token)
+        return job is None or job.get("cancelled", False)
+
+
+def _drop_job(token: str):
+    with _jobs_lock:
+        _jobs.pop(token, None)
 
 
 # --- Client construction & TAN bootstrap --------------------------------------
@@ -186,26 +205,46 @@ def _default_from_date(from_date: Optional[date]) -> date:
     return from_date or (date.today() - timedelta(days=90))
 
 
-def _run_collect(client: FinTS3PinTanClient, from_date: date):
-    """Fetch SEPA accounts and their transactions. Returns ('tan', need) if a TAN
-    is required, else ('done', (accounts, statements)). Safe to re-run after auth."""
+def _normalize_transactions(result):
+    """Nach einer TAN liefert python-fints beim CAMT-Pfad (HKCAZ) die rohen XML-Streams
+    als Tupel (booked, pending) zurück — das Parsen macht sonst `get_transactions()`
+    selbst, das wir hier übersprungen haben. Für MT940 (HKKAZ) kommt bereits die
+    fertige Liste. Nicht erkannte Formen unverändert durchreichen."""
+    if isinstance(result, tuple) and len(result) == 2:
+        booked_streams, _pending_streams = result
+        transactions = []
+        for stream in booked_streams:
+            transactions += [FinTSTransaction(t) for t in camt053_to_dict(stream)]
+        return transactions
+    return result
+
+
+def _collect_with_tan(token: str, client: FinTS3PinTanClient, from_date: date):
+    """Sammelt Konten, Umsätze und Salden ein und löst eine unterwegs verlangte
+    TAN/Freigabe direkt hier auf — im selben Thread und damit im selben lebenden
+    Client-Objekt. Nur so bleibt der Auftragszustand erhalten und die Bank fordert
+    genau eine Freigabe an."""
     accounts = client.get_sepa_accounts()
     if isinstance(accounts, NeedTANResponse):
-        return ("tan", accounts)
+        accounts = _await_tan(token, client, accounts)
 
     end = date.today()
     statements = []
     for acc in accounts:
         tx = client.get_transactions(acc, from_date, end)
         if isinstance(tx, NeedTANResponse):
-            return ("tan", tx)
+            tx = _normalize_transactions(_await_tan(token, client, tx))
+
         balance = None
         try:
             balance = client.get_balance(acc)
+            if isinstance(balance, NeedTANResponse):
+                balance = _await_tan(token, client, balance)
         except Exception:
             balance = None
+
         statements.append((acc, tx, balance))
-    return ("done", (accounts, statements))
+    return statements
 
 
 def _balance_amount(balance) -> Optional[Decimal]:
@@ -367,44 +406,6 @@ def _hktan_version(client) -> Optional[int]:
         return None
 
 
-def _restore_decoupled_flag(need_obj, decoupled: bool):
-    """python-fints 5.0.0 verliert das decoupled-Flag bei get_data()/from_data():
-    _from_data_v1 rekonstruiert NeedTANResponse immer mit decoupled=False. Ohne
-    Korrektur schickt send_tan dann HKTAN-Prozess '2' (TAN-Einreichung mit leerer
-    TAN) statt 'S' (Statusabfrage) — Atruvia bricht den Vorgang damit ab (9010)."""
-    if decoupled and getattr(need_obj, "decoupled", None) is not True:
-        need_obj.decoupled = True
-    return need_obj
-
-
-# Fortsetzungs-Methode ohne Client-Zustand: gibt die Bank-Antwort unveraendert zurueck
-_NEUTRAL_RESUME = "_continue_dialog_initialization"
-
-
-def _neutralize_resume_method(need_obj, client) -> bool:
-    """Verhindert den AttributeError '_touchdown_args' beim stateless TAN-Flow.
-
-    Loest ein Datenabruf (HKKAZ/HKCAZ) die SCA aus, merkt sich python-fints als
-    Fortsetzung `_continue_fetch_with_touchdowns`. Diese Methode braucht den
-    Touchdown-Zustand (Segment-Factory, Response-Processor, Segment-Typ), der nur
-    im RAM des damaligen Client-Objekts liegt und weder von deconstruct() noch von
-    pause_dialog() mitgespeichert wird — Closures sind nicht serialisierbar. Im
-    Folge-Request ist der Client neu, die Attribute fehlen, und die Verarbeitung
-    stirbt mit AttributeError, obwohl die Bank die Freigabe (0900) und die Umsaetze
-    (0020) bereits geliefert hat.
-
-    Loesung: Fortsetzung auf eine zustandslose Methode umbiegen, die die Antwort
-    nur durchreicht. Die Umsaetze holen wir danach im authentifizierten Dialog
-    ohnehin frisch ab (`_run_collect`) — dasselbe Muster, das nach jeder TAN greift.
-    """
-    if getattr(need_obj, "resume_method", None) != "_continue_fetch_with_touchdowns":
-        return False
-    if hasattr(client, "_touchdown_args"):
-        return False  # gleicher Client wie beim Absetzen — Zustand ist da
-    need_obj.resume_method = _NEUTRAL_RESUME
-    return True
-
-
 def _tan_payload(need: NeedTANResponse, token: str, poll: Optional[dict] = None,
                  poll_after: Optional[int] = None) -> dict:
     """Build the API payload describing a required TAN."""
@@ -427,10 +428,59 @@ def _tan_payload(need: NeedTANResponse, token: str, poll: Optional[dict] = None,
         "challenge_image": challenge_image,
     }
     if decoupled and poll:
-        payload["poll_after"] = poll_after if poll_after is not None else poll.get("first_wait", 3)
-        payload["poll_interval"] = poll.get("interval", 3)
-        payload["manual_confirm"] = not poll.get("automated", True)
+        # Das Frontend fragt nur noch UNSEREN Job-Status ab (kein Bank-Kontakt),
+        # deshalb ist ein fixer, kurzer Takt richtig — die Bank-Wartezeiten hält
+        # der Worker-Thread ein.
+        payload["poll_after"] = poll_after if poll_after is not None else 2
+        payload["poll_interval"] = 2
+        payload["manual_confirm"] = False
     return payload
+
+
+def _await_tan(token: str, client: FinTS3PinTanClient, need: NeedTANResponse):
+    """Blockiert den Worker, bis die Freigabe erteilt bzw. die TAN eingegeben ist.
+
+    Decoupled: im BPD-Takt der Bank nachfragen (Prozess 'S'), bis sie die Freigabe
+    meldet. Sonst: auf die vom Nutzer über /tan gelieferte TAN warten.
+    Rückgabe ist das Ergebnis von send_tan — bei Datenabrufen enthält es bereits
+    die Umsätze, weil der Auftragszustand im lebenden Client erhalten ist."""
+    decoupled = bool(getattr(need, "decoupled", False))
+    poll = _decoupled_params(client) if decoupled else {}
+    _set_job(token, "tan_required", _tan_payload(need, token, poll=poll))
+
+    if not decoupled:
+        tan = _wait_for_tan_input(token)
+        resp = client.send_tan(need, tan)
+        _set_job(token, "running", {})
+        return resp
+
+    time.sleep(poll.get("first_wait", 3))
+    for _ in range(poll.get("max_polls", 60)):
+        if _job_cancelled(token):
+            raise BankingError("Abruf abgebrochen.")
+        resp = client.send_tan(need, "")
+        if not (isinstance(resp, NeedTANResponse) and getattr(resp, "decoupled", False)):
+            _set_job(token, "running", {})
+            return resp
+        need = resp
+        time.sleep(poll.get("interval", 3))
+
+    raise BankingError(
+        "Die Freigabe wurde nicht rechtzeitig bestätigt – bitte die Umsätze erneut abrufen."
+    )
+
+
+def _wait_for_tan_input(token: str) -> str:
+    """Wartet auf die per /tan eingereichte TAN (klassisches TAN-Verfahren)."""
+    with _jobs_lock:
+        job = _jobs.get(token)
+    if not job:
+        raise BankingError("TAN-Vorgang abgelaufen oder ungültig. Bitte erneut abrufen.")
+    if not job["tan_event"].wait(_TAN_INPUT_TIMEOUT):
+        raise BankingError("Es wurde keine TAN eingegeben – Vorgang abgebrochen.")
+    if job.get("cancelled"):
+        raise BankingError("Abruf abgebrochen.")
+    return job.get("tan_value") or ""
 
 
 # --- Diagnostics: capture the bank's FinTS return codes (incl. internal sends) -----
@@ -467,211 +517,130 @@ def _format_codes(codes: list) -> str:
 
 # --- Public entry points (called by the router) -------------------------------
 
-def start_sync(db: Session, connection: BankConnection, pin: str, from_date: Optional[date]) -> dict:
-    """Begin a sync. Returns a 'done' result or a 'tan_required' result."""
-    from_date = _default_from_date(from_date)
-    codes: list = []
+def _sync_worker(token: str, connection_id: int, user_id: int, pin: str, from_date: date):
+    """Führt den kompletten Abruf in einem Hintergrund-Thread aus.
 
+    Der Thread hält das FinTS-Client-Objekt von Anfang bis Ende am Leben. Damit
+    bleiben auch die nicht-serialisierbaren Auftragszustände von python-fints
+    erhalten, und eine unterwegs verlangte Freigabe kann direkt beantwortet
+    werden — die Bank fordert genau EINE Freigabe an. Das Frontend fragt
+    derweil nur den Job-Status ab und löst dabei keinen Bank-Kontakt aus."""
+    db = SessionLocal()
+    codes: list = []
     try:
+        connection = db.query(BankConnection).filter(
+            BankConnection.id == connection_id,
+            BankConnection.user_id == user_id,
+        ).first()
+        if connection is None:
+            _set_job(token, "error", {"status": "error", "message": "Bankverbindung nicht gefunden"})
+            return
+
         client = _build_client(connection, pin, from_data=_load_system_data(connection))
         codes = _attach_code_recorder(client)
         _bootstrap_tan(client, connection)
         db.commit()  # persist any tan_mechanism/medium choice
 
-        need = None
-        dialog_data = None
-        payload = None
+        logger.info(
+            "FinTS sync: conn=%s mechanism=%s hktan_v=%s",
+            connection_id, client.selected_security_function, _hktan_version(client),
+        )
+
         with client:
-            # PSD2: completing the login may itself require a TAN. This also assigns the
-            # system_id, so it must be handled before any read operation.
+            # PSD2: schon die Anmeldung kann eine Freigabe verlangen (weist zugleich
+            # die system_id zu) — vor jedem Lesezugriff auflösen.
             if getattr(client, "init_tan_response", None) is not None:
-                need = client.init_tan_response
-                dialog_data = client.pause_dialog()
-            else:
-                status, payload = _run_collect(client, from_date)
-                if status == "tan":
-                    need = payload
-                    dialog_data = client.pause_dialog()
+                _await_tan(token, client, client.init_tan_response)
+            statements = _collect_with_tan(token, client, from_date)
 
-        client_data = client.deconstruct(including_private=True)
-        _save_system_data(db, connection, client_data)
+        _save_system_data(db, connection, client.deconstruct(including_private=True))
 
-        if need is not None:
-            decoupled = bool(getattr(need, "decoupled", False))
-            poll = _decoupled_params(client) if decoupled else {}
-            logger.info(
-                "FinTS start: conn=%s TAN erforderlich (decoupled=%s) mechanism=%s hktan_v=%s poll=%s | codes: %s",
-                connection.id, decoupled, client.selected_security_function,
-                _hktan_version(client), poll, _format_codes(codes),
-            )
-            token = _store_pending(
-                user_id=connection.user_id, connection_id=connection.id, pin=pin,
-                client_data=client_data, dialog_data=dialog_data,
-                tan_data=need.get_data(), from_date=from_date,
-                decoupled=decoupled, poll=poll,
-            )
-            payload = _tan_payload(need, token, poll=poll)
-            with _pending_lock:
-                if token in _pending:
-                    # Erste Statusabfrage frühestens nach der Bank-Wartezeit
-                    _pending[token]["not_before"] = time.time() + poll.get("first_wait", 3) if decoupled else 0
-                    _pending[token]["last_payload"] = dict(payload)
-            return payload
-
-        _, statements = payload
-        result = _import_statements(db, connection, statements, connection.user_id)
+        result = _import_statements(db, connection, statements, user_id)
         connection.last_sync = datetime.utcnow()
         db.commit()
-        return {"status": "done", **result}
 
-    except BankingError:
-        raise
+        logger.info("FinTS sync: conn=%s fertig — %s neu, %s Duplikate",
+                    connection_id, result.get("imported"), result.get("duplicates"))
+        _set_job(token, "done", {"status": "done", **result})
+
+    except BankingError as e:
+        _set_job(token, "error", {"status": "error", "message": str(e)})
     except Exception as e:
-        logger.warning("FinTS start_sync failed for connection %s: %s | bank codes: %s",
-                       connection.id, e, _format_codes(codes))
-        raise BankingError(_friendly_error(e, codes)) from e
+        logger.warning("FinTS sync failed for connection %s: %s | bank codes: %s",
+                       connection_id, e, _format_codes(codes))
+        _set_job(token, "error",
+                 {"status": "error", "message": _friendly_error(e, codes, context="resume")})
+    finally:
+        db.close()
+
+
+def _wait_for_job_state(token: str, timeout: float = 12.0) -> dict:
+    """Wartet kurz, bis der Worker einen für das Frontend verwertbaren Zustand
+    erreicht hat (TAN nötig, fertig oder Fehler). Schnelle Abrufe ohne Freigabe
+    sind damit weiterhin in einem einzigen Request erledigt."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        with _jobs_lock:
+            job = _jobs.get(token)
+            if job is None:
+                return {"status": "error", "message": "Abruf-Vorgang nicht mehr vorhanden."}
+            status, payload = job["status"], dict(job["payload"] or {})
+        if status in ("tan_required", "done", "error"):
+            if status in ("done", "error"):
+                _drop_job(token)
+            return payload or {"status": status}
+        time.sleep(0.25)
+
+    # Läuft noch (z.B. langsame Bank): das Frontend soll weiter Status abfragen
+    return {"status": "tan_required", "job_id": token, "decoupled": True,
+            "challenge": "Verbindung zur Bank wird aufgebaut …",
+            "poll_after": 2, "poll_interval": 2}
+
+
+def start_sync(db: Session, connection: BankConnection, pin: str, from_date: Optional[date]) -> dict:
+    """Startet einen Abruf. Liefert ein 'done'-, 'tan_required'- oder 'error'-Ergebnis."""
+    from_date = _default_from_date(from_date)
+
+    token = _new_job(connection.user_id, connection.id)
+    thread = threading.Thread(
+        target=_sync_worker,
+        args=(token, connection.id, connection.user_id, pin, from_date),
+        name=f"fints-sync-{connection.id}",
+        daemon=True,
+    )
+    thread.start()
+
+    return _wait_for_job_state(token)
 
 
 def resume_sync(db: Session, connection: BankConnection, token: str, tan: Optional[str]) -> dict:
-    """Resume a paused sync after the user provided a TAN (or for decoupled polling).
+    """Fragt den Status eines laufenden Abrufs ab bzw. reicht eine eingegebene TAN
+    an den wartenden Worker weiter. Löst selbst KEINEN Bank-Kontakt aus — dadurch
+    kann kein zusätzlicher Freigabe-Vorgang entstehen, egal wie oft das Frontend
+    (oder ein hängengebliebener Tab) pollt."""
+    job = _get_job(token, connection.user_id)
+    if not job:
+        raise BankingError("Abruf-Vorgang abgelaufen oder ungültig. Bitte erneut abrufen.")
 
-    Decoupled (App-Freigabe): pro Aufruf genau EINE Statusabfrage bei der Bank,
-    und nur im von der Bank vorgegebenen Takt (BPD-Wartezeiten). Zu frühe oder
-    parallele Polls werden ohne Bank-Kontakt beantwortet."""
-    pending = _get_pending(token, connection.user_id)
-    if not pending:
-        raise BankingError("TAN-Vorgang abgelaufen oder ungültig. Bitte erneut abrufen.")
+    if tan:
+        with _jobs_lock:
+            live = _jobs.get(token)
+            if live is not None:
+                live["tan_value"] = tan
+                live["tan_event"].set()
 
-    decoupled = bool(pending.get("decoupled"))
-    poll = pending.get("poll") or {}
+    return _wait_for_job_state(token)
 
-    if decoupled:
-        with _pending_lock:
-            p = _pending.get(token)
-            if not p:
-                raise BankingError("TAN-Vorgang abgelaufen oder ungültig. Bitte erneut abrufen.")
-            # Paralleler Poll läuft schon → letzten Stand zurückgeben, Bank nicht anfassen
-            if p.get("in_flight") and p.get("last_payload"):
-                payload = dict(p["last_payload"])
-                payload["poll_after"] = poll.get("interval", 3)
-                return payload
-            # Zu früh (Bank-Wartezeit läuft noch) → ohne Bank-Kontakt vertrösten
-            remaining = p.get("not_before", 0) - time.time()
-            if remaining > 1.5 and p.get("last_payload"):
-                payload = dict(p["last_payload"])
-                payload["poll_after"] = max(1, int(remaining + 0.999))
-                return payload
-            # Maximale Anzahl Statusabfragen der Bank respektieren
-            if p.get("polls_done", 0) >= poll.get("max_polls", 60):
-                _pending.pop(token, None)
-                raise BankingError(
-                    "Freigabe nicht innerhalb der erlaubten Wartezeit bestätigt – "
-                    "bitte die Umsätze erneut abrufen."
-                )
-            p["in_flight"] = True
-        # Rest der Wartezeit (≤1.5s) kurz aussitzen statt einen Roundtrip zu verschwenden
-        remaining = pending.get("not_before", 0) - time.time()
-        if 0 < remaining <= 1.5:
-            time.sleep(remaining)
 
-    codes: list = []
-    try:
-        client = _build_client(connection, pending["pin"], from_data=pending["client_data"])
-        codes = _attach_code_recorder(client)
-        # python-fints 5.0.0 verliert das decoupled-Flag beim Serialisieren → restaurieren,
-        # sonst geht statt der Statusabfrage (Prozess 'S') eine leere TAN (Prozess '2') raus
-        need_obj = _restore_decoupled_flag(NeedRetryResponse.from_data(pending["tan_data"]), decoupled)
-        neutralized = _neutralize_resume_method(need_obj, client)
-        logger.info(
-            "FinTS resume: conn=%s decoupled=%s poll=%s/%s mechanism=%s hktan_v=%s resume=%s%s",
-            connection.id, decoupled, pending.get("polls_done", 0), poll.get("max_polls"),
-            client.selected_security_function, _hktan_version(client),
-            getattr(need_obj, "resume_method", "?"), " (neutralisiert)" if neutralized else "",
-        )
-
-        still_need = None
-        dialog_data = None
-        collected = None
-
-        new_round = False
-
-        with client.resume_dialog(pending["dialog_data"]):
-            resp = client.send_tan(need_obj, tan or "")
-
-            if isinstance(resp, NeedTANResponse) and getattr(resp, "decoupled", False):
-                # Freigabe noch ausstehend (3956) — weiter pollen
-                still_need = resp
-                dialog_data = client.pause_dialog()
-            else:
-                # Freigabe erteilt: im jetzt authentifizierten Dialog frisch einsammeln
-                status, payload = _run_collect(client, pending["from_date"])
-                if status == "tan":
-                    # Die Bank verlangt für den Datenabruf eine eigene Freigabe (bei
-                    # Atruvia möglich, wenn schon der Login eine brauchte) — als neue
-                    # Runde weiterführen statt den Vorgang abzubrechen.
-                    rounds = pending.get("collect_rounds", 0) + 1
-                    if rounds > _MAX_COLLECT_ROUNDS:
-                        raise BankingError(
-                            "Die Bank verlangt wiederholt neue Freigaben – Abruf abgebrochen. "
-                            "Bitte später erneut versuchen."
-                        )
-                    still_need = payload
-                    dialog_data = client.pause_dialog()
-                    new_round = True
-                else:
-                    collected = payload
-
-        client_data = client.deconstruct(including_private=True)
-        _save_system_data(db, connection, client_data)
-
-        if still_need is not None:
-            # Update the pending entry for the next poll request (reuse the same token)
-            if new_round:
-                # Neuer Auftrag → Decoupled-Status und Bank-Takt neu bestimmen
-                decoupled = bool(getattr(still_need, "decoupled", False))
-                poll = _decoupled_params(client) if decoupled else {}
-                polls_done = 0
-                wait = poll.get("first_wait", 3)
-            else:
-                polls_done = pending.get("polls_done", 0) + 1
-                wait = poll.get("interval", 3)
-
-            payload = _tan_payload(still_need, token, poll=poll, poll_after=wait)
-            with _pending_lock:
-                if token in _pending:
-                    _pending[token].update({
-                        "client_data": client_data,
-                        "dialog_data": dialog_data,
-                        "tan_data": still_need.get_data(),
-                        "decoupled": decoupled,
-                        "poll": poll,
-                        "polls_done": polls_done,
-                        "collect_rounds": pending.get("collect_rounds", 0) + (1 if new_round else 0),
-                        "not_before": time.time() + wait,
-                        "last_payload": dict(payload),
-                        "in_flight": False,
-                        "expires": time.time() + _PENDING_TTL,
-                    })
-            return payload
-
-        _drop_pending(token)
-        _, statements = collected
-        result = _import_statements(db, connection, statements, connection.user_id)
-        connection.last_sync = datetime.utcnow()
-        db.commit()
-        return {"status": "done", **result}
-
-    except BankingError:
-        raise
-    except Exception as e:
-        logger.warning("FinTS resume_sync failed for connection %s: %s | bank codes: %s",
-                       connection.id, e, _format_codes(codes))
-        _drop_pending(token)
-        raise BankingError(_friendly_error(e, codes, context="resume")) from e
-    finally:
-        with _pending_lock:
-            if token in _pending:
-                _pending[token]["in_flight"] = False
+def cancel_sync(token: str, user_id: int) -> bool:
+    """Bricht einen laufenden Abruf ab (Nutzer schließt den Dialog)."""
+    with _jobs_lock:
+        job = _jobs.get(token)
+        if not job or job["user_id"] != user_id:
+            return False
+        job["cancelled"] = True
+        job["tan_event"].set()  # einen wartenden TAN-Eingabe-Worker aufwecken
+    return True
 
 
 def _friendly_error(e: Exception, codes: Optional[list] = None, context: str = "start") -> str:

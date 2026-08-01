@@ -471,6 +471,13 @@ class ApiClient {
         });
     }
 
+    async cancelBankSync(connectionId, jobId) {
+        return this.request(`/banking/connections/${connectionId}/cancel`, {
+            method: 'POST',
+            body: { job_id: jobId }
+        });
+    }
+
 }
 
 // Export singleton instance
