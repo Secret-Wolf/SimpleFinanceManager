@@ -116,14 +116,15 @@ Security-relevant actions log JSON lines to `data/logs/audit.log` via `audit.py`
 
 ## Project status (Stand 2026-08-02)
 
-**Neu in dieser Session (2026-08-02, noch NICHT committet/gepusht):**
+**Neu in dieser Session (2026-08-02, committet als `9816c0c` + Image gebaut/gepusht):**
 - **Konten löschen** — `DELETE /api/accounts/{id}` (Kaskade: Transaktionen + Tag-Zuweisungen + Beleg-Dateien) + Papierkorb-Button auf den Konto-Karten mit Warn-Dialog (zeigt Transaktionszahl).
 - **Enter-Taste im Banking-PIN/TAN-Feld** löst jetzt Abrufen/Bestätigen aus — generisches `data-enter-action`-Pattern in `event-handlers.js` (Konvention #3), Doppel-Submit-Guards in `confirmBankSync`/`confirmBankTan`.
 - **Tags** (Konvention #6b, Migrationen 20+21): CRUD + Verwaltungs-Modal ("Tags"-Button auf der Transaktionsseite), Chips im Detail-Modal (Datalist + Anlegen on-the-fly), Bulk-Zuweisung über die Mehrfachauswahl, Filter-Dropdown mit **Treffersumme** (Steuer-Use-Case), Tags-Spalte im CSV-Export.
 - **Belege** (Bonus aus derselben Anforderung): PDF/PNG/JPG pro Transaktion hochladen (Magic-Byte-Whitelist, 10 MB, max 10/Transaktion), inline öffnen, 📎-Badge in der Liste, Datei-Cleanup bei Transaktions-/Konto-Löschung.
 - **TOTP-2FA** (Migration 19): Einrichtung im Profil (QR + Bestätigungscode + 8 Recovery-Codes einmalig angezeigt), Login-Flow zweistufig (`totp_required`), Replay-Schutz, Deaktivieren mit Passwort+Code, Admin-Reset in der Benutzerverwaltung (🔐-Badge). Neue Deps `pyotp==2.9.0`, `qrcode==8.2` (pinned).
 - **Session-Dauer**: Refresh-Token-Default 7→14 Tage (`REFRESH_TOKEN_EXPIRE_DAYS`); Refresh rotierte schon immer beide Cookies → Sliding Session, Neu-Login nur nach >14 Tagen Inaktivität.
-- **Qualität**: 95 Tests grün (22 neue in `test_accounts_delete/test_tags/test_totp/test_attachments.py`), ruff/bandit/pip-audit sauber, Migrationen 19–21 gegen Kopie einer Bestands-DB verifiziert (idempotent, kein Datenverlust, Legacy-Spalte `transactions.tags` entfernt), Frontend-Wiring-Check (IDs/Actions) bestanden. `tags.js` neu → in `sw.js` SHELL_ASSETS ergänzt. **Kein Image gebaut/gepusht.**
+- **Qualität**: 95 Tests grün (22 neue in `test_accounts_delete/test_tags/test_totp/test_attachments.py`), ruff/bandit/pip-audit sauber, Migrationen 19–21 gegen Kopie einer Bestands-DB verifiziert (idempotent, kein Datenverlust, Legacy-Spalte `transactions.tags` entfernt), Frontend-Wiring-Check (IDs/Actions) bestanden. `tags.js` neu → in `sw.js` SHELL_ASSETS ergänzt.
+- **Image gebaut & gepusht 2026-08-02** (`192.168.178.30:5000/finanzmanager:latest`, digest `eec7a7b6…`; ersetzt `a1823e0c…` vom 2026-07-05). Smoke-Test im Image OK (pyotp/qrcode importierbar, `banks.json` + `tags.js` enthalten, App importiert mit 83 Routen). **Deploy auf dem Server:** `docker compose pull && docker compose up -d` — die Migrationen 19–21 laufen beim Start automatisch, bestehende Logins überleben (kein `token_version`-Bump). **Weiterhin offen aus der Vorrunde:** in der laufenden Compose `FORWARDED_ALLOW_IPS` durch **`TRUSTED_PROXIES=192.168.178.5`** ersetzen. Nach dem Deploy: 2FA ist **opt-in** — pro Benutzer im Profil aktivieren, sonst ändert sich am Login nichts.
 
 **Done & committed (`main`):**
 - **FinTS/HBCI online banking** — fully working, **both ING and Volksbank/Atruvia verified end-to-end** with the real DK product-registration ID (shipped as default). Read-only, PIN never persisted, TAN/decoupled flow, dedup against CSV imports.
