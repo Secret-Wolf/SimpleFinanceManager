@@ -111,3 +111,39 @@ def test_friendly_error_9010_context():
     assert "URL" not in resume_msg
     assert "erneut abrufen" in resume_msg
     assert "9010" in resume_msg
+
+
+def test_friendly_error_pin_message_never_blames_pin_during_approval():
+    """python-fints wirft FinTSClientPINError für JEDEN 9xxx-Code. Im Freigabeschritt
+    ist die PIN aber nachweislich korrekt (die Bank hat die Freigabe angefordert) —
+    die Meldung darf den Nutzer nicht auf eine falsche Fährte schicken."""
+    exc = Exception("Error during dialog initialization, PIN wrong?")
+    codes = [("9955", "Vorgang abgebrochen")]
+
+    resume_msg = _friendly_error(exc, codes, context="resume")
+    assert "PIN war korrekt" in resume_msg
+    assert "9955" in resume_msg  # echte Bank-Meldung sichtbar
+
+    # Beim Login selbst bleibt der PIN-Hinweis richtig — jetzt mit Bank-Codes
+    start_msg = _friendly_error(exc, codes, context="start")
+    assert "PIN oder Zugangsdaten falsch" in start_msg
+    assert "9955" in start_msg
+
+
+def test_hktan_version_helper():
+    from app.services.fints_service import _hktan_version
+
+    class _Client:
+        def get_tan_mechanisms(self):
+            return {"921": SimpleNamespace(VERSION=7)}
+
+        def get_current_tan_mechanism(self):
+            return "921"
+
+    assert _hktan_version(_Client()) == 7
+
+    class _Broken:
+        def get_tan_mechanisms(self):
+            raise RuntimeError("kein BPD")
+
+    assert _hktan_version(_Broken()) is None

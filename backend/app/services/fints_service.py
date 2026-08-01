@@ -352,6 +352,17 @@ def _decoupled_params(client: FinTS3PinTanClient) -> dict:
     return params
 
 
+def _hktan_version(client) -> Optional[int]:
+    """HKTAN-Segmentversion des gewählten TAN-Verfahrens. Der Decoupled-Prozess 'S'
+    existiert erst ab Version 7 — bei einem älteren Verfahren wäre die Statusabfrage
+    gar nicht spezifiziert (nützlich für die Fehlersuche)."""
+    try:
+        mech = client.get_tan_mechanisms()[client.get_current_tan_mechanism()]
+        return int(getattr(mech, "VERSION", 0)) or None
+    except Exception:
+        return None
+
+
 def _restore_decoupled_flag(need_obj, decoupled: bool):
     """python-fints 5.0.0 verliert das decoupled-Flag bei get_data()/from_data():
     _from_data_v1 rekonstruiert NeedTANResponse immer mit decoupled=False. Ohne
@@ -456,6 +467,11 @@ def start_sync(db: Session, connection: BankConnection, pin: str, from_date: Opt
         if need is not None:
             decoupled = bool(getattr(need, "decoupled", False))
             poll = _decoupled_params(client) if decoupled else {}
+            logger.info(
+                "FinTS start: conn=%s TAN erforderlich (decoupled=%s) mechanism=%s hktan_v=%s poll=%s | codes: %s",
+                connection.id, decoupled, client.selected_security_function,
+                _hktan_version(client), poll, _format_codes(codes),
+            )
             token = _store_pending(
                 user_id=connection.user_id, connection_id=connection.id, pin=pin,
                 client_data=client_data, dialog_data=dialog_data,
@@ -533,6 +549,11 @@ def resume_sync(db: Session, connection: BankConnection, token: str, tan: Option
         # python-fints 5.0.0 verliert das decoupled-Flag beim Serialisieren → restaurieren,
         # sonst geht statt der Statusabfrage (Prozess 'S') eine leere TAN (Prozess '2') raus
         need_obj = _restore_decoupled_flag(NeedRetryResponse.from_data(pending["tan_data"]), decoupled)
+        logger.info(
+            "FinTS resume: conn=%s decoupled=%s poll=%s/%s mechanism=%s hktan_v=%s",
+            connection.id, decoupled, pending.get("polls_done", 0), poll.get("max_polls"),
+            client.selected_security_function, _hktan_version(client),
+        )
 
         still_need = None
         dialog_data = None
@@ -615,7 +636,14 @@ def _friendly_error(e: Exception, codes: Optional[list] = None, context: str = "
                 "(registrierung@hbci-zka.de) und als FINTS_PRODUCT_ID setzen. "
                 "Volksbank/Atruvia erzwingt dies – ING meist nicht.")
     if code_set & {"9340", "9910", "9930", "9931", "9942"} or "pin" in low:
-        return "Anmeldung fehlgeschlagen – PIN oder Zugangsdaten falsch."
+        if context == "resume":
+            # Im Freigabe-/TAN-Schritt ist die PIN längst akzeptiert (sonst hätte die Bank
+            # gar keine Freigabe angefordert). python-fints wirft hier FinTSClientPINError
+            # für JEDEN 9xxx-Code — die Meldung "PIN falsch" wäre schlicht falsch.
+            return ("Die Bank hat die Freigabe nicht akzeptiert. Die PIN war korrekt (die "
+                    "Freigabe-Anfrage kam ja an) – vermutlich ist der Vorgang abgelaufen "
+                    f"oder die Bank lehnt die Statusabfrage ab. Bank-Meldung: {_format_codes(codes)}")
+        return f"Anmeldung fehlgeschlagen – PIN oder Zugangsdaten falsch. Bank-Meldung: {_format_codes(codes)}"
     if "tan" in low and "wrong" in low:
         return "TAN falsch oder abgelaufen."
 
