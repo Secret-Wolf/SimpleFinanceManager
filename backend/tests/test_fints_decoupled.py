@@ -205,6 +205,44 @@ def test_friendly_error_9010_context():
     assert "9010" in resume_msg
 
 
+def test_friendly_error_surfaces_bank_reauth_instruction():
+    """ING verlangt per PSD2 regelmäßig ein Web-Login. Die Bank sagt das im Klartext —
+    diese Anweisung muss vorn stehen, nicht hinter unseren Vermutungen."""
+    codes = [("9800", "Der Dialog wurde abgebrochen"),
+             ("9942", "Bitte erneuern Sie ihre Authentifizierung. Einfach unter ING.de einloggen")]
+    exc = Exception("Error during dialog initialization, PIN wrong?")
+
+    for ctx in ("start", "resume"):
+        msg = _friendly_error(exc, codes, context=ctx)
+        assert msg.startswith("Die Bank verlangt eine Erneuerung der Authentifizierung")
+        assert "ING.de einloggen" in msg, "Klartext der Bank muss enthalten sein"
+        assert "PIN oder Zugangsdaten falsch" not in msg
+        assert "PIN war korrekt" not in msg
+        assert "90 Tage" in msg  # Einordnung: wiederkehrend, kein App-Fehler
+
+
+def test_error_context_follows_sca_state():
+    """Vor einer Freigabe kann die PIN die Ursache sein, danach nachweislich nicht."""
+    token = fs._new_job(user_id=1, connection_id=1)
+    assert fs._error_context(token) == "start"
+
+    fs._mark_sca_done(token)
+    assert fs._error_context(token) == "resume"
+    assert fs._get_job(token, 1)["status"] == "running"
+
+    assert fs._error_context("gibt-es-nicht") == "start"
+
+
+def test_bank_instruction_picks_most_informative_text():
+    from app.services.fints_service import _bank_instruction
+
+    codes = [("0010", "OK"), ("9942", "Bitte erneuern Sie ihre Authentifizierung")]
+    assert _bank_instruction(codes) == "Bitte erneuern Sie ihre Authentifizierung."
+    # Vorhandene Satzzeichen nicht verdoppeln
+    assert _bank_instruction([("9", "Bitte einloggen.")]) == "Bitte einloggen."
+    assert _bank_instruction([]) == ""
+
+
 def test_friendly_error_never_blames_pin_during_approval():
     """python-fints wirft FinTSClientPINError für JEDEN 9xxx-Code. Im Freigabe-
     schritt ist die PIN nachweislich korrekt (die Bank hat ja die Freigabe

@@ -84,6 +84,7 @@ def _new_job(user_id: int, connection_id: int) -> str:
             "connection_id": connection_id,
             "status": "running",          # running | tan_required | done | error
             "payload": {},
+            "sca_done": False,            # True, sobald eine Freigabe/TAN akzeptiert wurde
             "tan_event": threading.Event(),
             "tan_value": None,
             "cancelled": False,
@@ -108,6 +109,23 @@ def _get_job(token: str, user_id: int) -> Optional[dict]:
         if not job or job["user_id"] != user_id:
             return None
         return job
+
+
+def _mark_sca_done(token: str):
+    """Merkt, dass eine Freigabe/TAN erfolgreich war. Steuert die Fehlermeldung:
+    danach ist die PIN nachweislich korrekt, davor kann sie die Ursache sein."""
+    with _jobs_lock:
+        job = _jobs.get(token)
+        if job:
+            job["sca_done"] = True
+            job["status"] = "running"
+            job["payload"] = {}
+
+
+def _error_context(token: str) -> str:
+    with _jobs_lock:
+        job = _jobs.get(token)
+        return "resume" if job and job.get("sca_done") else "start"
 
 
 def _job_cancelled(token: str) -> bool:
@@ -451,7 +469,7 @@ def _await_tan(token: str, client: FinTS3PinTanClient, need: NeedTANResponse):
     if not decoupled:
         tan = _wait_for_tan_input(token)
         resp = client.send_tan(need, tan)
-        _set_job(token, "running", {})
+        _mark_sca_done(token)
         return resp
 
     time.sleep(poll.get("first_wait", 3))
@@ -460,7 +478,7 @@ def _await_tan(token: str, client: FinTS3PinTanClient, need: NeedTANResponse):
             raise BankingError("Abruf abgebrochen.")
         resp = client.send_tan(need, "")
         if not (isinstance(resp, NeedTANResponse) and getattr(resp, "decoupled", False)):
-            _set_job(token, "running", {})
+            _mark_sca_done(token)
             return resp
         need = resp
         time.sleep(poll.get("interval", 3))
@@ -569,7 +587,8 @@ def _sync_worker(token: str, connection_id: int, user_id: int, pin: str, from_da
         logger.warning("FinTS sync failed for connection %s: %s | bank codes: %s",
                        connection_id, e, _format_codes(codes))
         _set_job(token, "error",
-                 {"status": "error", "message": _friendly_error(e, codes, context="resume")})
+                 {"status": "error",
+                  "message": _friendly_error(e, codes, context=_error_context(token))})
     finally:
         db.close()
 
@@ -643,6 +662,16 @@ def cancel_sync(token: str, user_id: int) -> bool:
     return True
 
 
+def _bank_instruction(codes: Optional[list]) -> str:
+    """Die aussagekräftigste Klartext-Meldung der Bank (längster Text gewinnt) —
+    für Fälle, in denen die Bank dem Nutzer selbst sagt, was zu tun ist."""
+    texts = [t.strip() for _c, t in (codes or []) if t and t.strip()]
+    if not texts:
+        return ""
+    best = max(texts, key=len)
+    return best if best.endswith((".", "!", "?")) else best + "."
+
+
 def _friendly_error(e: Exception, codes: Optional[list] = None, context: str = "start") -> str:
     msg = str(e) or e.__class__.__name__
     low = msg.lower()
@@ -650,6 +679,18 @@ def _friendly_error(e: Exception, codes: Optional[list] = None, context: str = "
 
     if "connection" in low or "timed out" in low or "name or service" in low or "getaddrinfo" in low:
         return "Bankserver nicht erreichbar – FinTS-URL prüfen."
+
+    # PSD2: Manche Banken (z.B. ING) verlangen periodisch — üblicherweise alle 90 Tage —
+    # ein Login im Web-Banking, bevor der FinTS-Zugang weiterläuft. Die Bank liefert dazu
+    # eine eindeutige Handlungsanweisung im Klartext; die gehört nach vorn, nicht hinter
+    # unsere Vermutungen. Erkennung über den Text, weil derselbe Code je nach Bank auch
+    # "PIN falsch" bedeuten kann.
+    codes_text = " ".join(t for _c, t in (codes or [])).lower()
+    if "authentifizierung" in codes_text and ("erneuern" in codes_text or "einloggen" in codes_text):
+        return (f"Die Bank verlangt eine Erneuerung der Authentifizierung: {_bank_instruction(codes)} "
+                "Danach funktioniert der Abruf wieder. Das ist eine PSD2-Vorgabe und wiederholt "
+                "sich in der Regel alle 90 Tage – kein Fehler der App.")
+
     if "9010" in code_set:
         if context == "resume":
             # Mitten im TAN-/Freigabevorgang bedeutet 9010 NICHT "falsche URL",
